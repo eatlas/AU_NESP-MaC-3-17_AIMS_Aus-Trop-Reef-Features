@@ -291,16 +291,57 @@ def main():
     if 'DepthCatSr' not in reefs.columns:
         reefs['DepthCatSr'] = None
 
+    if 'DEMSr' not in reefs.columns:
+        reefs['DEMSr'] = None
+
     # Calculate depth categories and sources where needed
     print("Calculating depth categories and sources...")
     for i, row in reefs.iterrows():
         # Only update depth category if it's not already set
         if pd.isna(row['DepthCat']) or row['DepthCat'] is None or row['DepthCat'] == '':
-            depth_cat = determine_depth_category(row['DEM90p'])
-            if depth_cat:
-                reefs.at[i, 'DepthCat'] = depth_cat
-                # Udate DepthCatSr to reflect which raster was used
+            rb_type = str(row.get('RB_Type_L3', '')).strip()
+            attachment = str(row.get('Attachment', '')).strip()
+            orig_type = str(row.get('OrigType', '')).strip()
+            est_depth_cat = determine_depth_category(row['DEM90p'])
+
+            # Apply rules. These are to compensate for imperfect edstimates from the DEM.
+            rule_applied = False
+            # Coral Reef, Fringing: If estimated is 'Deep', set to 'Shallow'
+            if rb_type == 'Coral Reef' and attachment == 'Fringing':
+                if est_depth_cat == 'Deep':
+                    reefs.at[i, 'DepthCat'] = 'Shallow'
+                    rule_applied = True
+            # Rocky Reef, Fringing: If estimated is 'Deep', set to 'Shallow'
+            elif rb_type == 'Rocky Reef' and attachment == 'Fringing':
+                if est_depth_cat == 'Deep':
+                    reefs.at[i, 'DepthCat'] = 'Shallow'
+                    rule_applied = True
+            # Intertidal Sediment, Fringing or Isolated: Set to 'Intertidal'
+            elif rb_type == 'Intertidal Sediment' and attachment in ['Fringing', 'Isolated']:
+                reefs.at[i, 'DepthCat'] = 'Intertidal'
+                rule_applied = True
+            # Island, Fringing or Isolated: Set to 'Land'
+            elif rb_type == 'Island' and attachment in ['Fringing', 'Isolated']:
+                reefs.at[i, 'DepthCat'] = 'Land'
+                rule_applied = True
+            # Unvegetated Cay, Fringing or Isolated: Set to 'Land'
+            elif rb_type == 'Unvegetated Cay' and attachment in ['Fringing', 'Isolated', 'Land']:
+                reefs.at[i, 'DepthCat'] = 'Land'
+                rule_applied = True
+            elif orig_type in ['Pearl Pontoon', 'Channel Marker']:
+                reefs.at[i, 'DepthCat'] = 'Surface'
+                rule_applied = True
+
+            if rule_applied:
+                # If a rule was applied, set the DepthCatSr to the rule source
+                reefs.at[i, 'DepthCatSr'] = 'RB_Type_L3 rule'
+            # If no rule applied, use estimated depth category as before
+            if not rule_applied and est_depth_cat:
+                reefs.at[i, 'DepthCat'] = est_depth_cat
                 reefs.at[i, 'DepthCatSr'] = src_values[i]
+        # Set DEM source
+        if pd.isna(row['DEMSr']) or row['DEMSr'] is None or row['DEMSr'] == '':
+            reefs.at[i, 'DEMSr'] = src_values[i]
 
     # Save the result
     print(f"Saving output shapefile to {OUTPUT_SHAPE}")
