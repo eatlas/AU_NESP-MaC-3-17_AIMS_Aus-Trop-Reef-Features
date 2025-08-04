@@ -176,15 +176,15 @@ def main():
     
     # --- Save a copy of island/mainland features for later attachment calculation ---
     print("\nSaving island/mainland features for later attachment calculation...")
-    island_mainland_mask = ts_gbr_features['FEAT_NAME'].isin(['Island', 'Mainland'])
+    island_mainland_mask = ts_gbr_features['LEVEL_1'].isin(['Island', 'Mainland'])
     islands_mainland = ts_gbr_features[island_mainland_mask].copy()
     
-    # Remove features with FEAT_NAME='Island', 'Mainland', 'Other' early in the process
-    print("\nRemoving features with FEAT_NAME='Island', 'Mainland', or 'Other'...")
+    # Remove features with LEVEL_1='Island', 'Mainland', 'Other' early in the process
+    print("\nRemoving features with LEVEL_1='Island', 'Mainland', or 'Other'...")
     original_count = len(ts_gbr_features)
-    ts_gbr_features = ts_gbr_features[~ts_gbr_features['FEAT_NAME'].isin(['Island', 'Mainland', 'Other'])]
+    ts_gbr_features = ts_gbr_features[~ts_gbr_features['LEVEL_1'].isin(['Island', 'Mainland', 'Other'])]
     removed_count = original_count - len(ts_gbr_features)
-    print(f"  Removed {removed_count} features with FEAT_NAME='Island', 'Mainland', or 'Other'")
+    print(f"  Removed {removed_count} features with LEVEL_1='Island', 'Mainland', or 'Other'")
     
     # Check for duplicate CODEs in TS-GBR-Features - but only warn, don't exit
     print("\nChecking for duplicate CODEs in TS-GBR-Features...")
@@ -466,6 +466,10 @@ def main():
         print("Please update the classification lookup table to include these values.")
         # Generate error if mapping failed
         sys.exit(1)
+    
+    # --- OVERRIDE Attachment for Unvegetated Cay ---
+    print("  Overriding 'Attachment' to 'Land' for Unvegetated Cay features...")
+    merged_features.loc[merged_features['RB_Type_L3'] == 'Unvegetated Cay', 'Attachment'] = 'Land'
     
     # Remove unnecessary attributes
     print("\nRemoving unnecessary attributes...")
