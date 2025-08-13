@@ -25,10 +25,10 @@ Key Algorithms:
 
 Output Attributes:
     - Sovereign1: Primary country with the most reef area
-    - SOVEREIGN2: Secondary country with the lesser reef area (if applicable)
-    - SOV1_PCT: Percentage of reef area in the primary country
-    - SOV2_PCT: Percentage of reef area in the secondary country (if applicable)
-    - UNION: Country or treaty designation, concatenated with semicolons for cross-boundary reefs
+    - Sovereign2: Secondary country with the lesser reef area (if applicable)
+    - Sov1_Perc: Percentage of reef area in the primary country
+    - Sov2_Perc: Percentage of reef area in the secondary country (if applicable)
+    - Union: Country or treaty designation, concatenated with semicolons for cross-boundary reefs
 """
 
 import geopandas as gpd
