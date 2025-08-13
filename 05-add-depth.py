@@ -1,34 +1,39 @@
 """
 Reef Bathymetry Statistics Calculator
-------------------------------------
+-------------------------------------
 
 PURPOSE:
-    This script calculates bathymetric statistics for reef boundary polygons by extracting
-    elevation values from a bathymetry/topography raster dataset. For each reef polygon,
-    it computes percentile-based elevation values (DEM10p, DEM50p, DEM90p), then
-    saves these as attributes in a new shapefile.
+    Calculates bathymetric statistics for reef boundary polygons by extracting
+    elevation values from bathymetry/topography raster datasets. For each reef polygon,
+    computes percentile-based elevation values (DEM10p, DEM50p, DEM90p), and
+    assigns depth category attributes using both DEM data and rule-based logic.
 
 INPUTS:
     - Reef boundary polygons (shapefile)
-    - Bathymetry/topography raster (VRT)
+    - Bathymetry/topography raster datasets (VRT and GeoTIFFs)
 
 OUTPUTS:
-    - Copy of input shapefile with added DEM10p, DEM50p, and DEM90p attributes
-    - Added DepthCat (Depth Category) and DepthCatSr (Source) attributes
+    - Copy of input shapefile with added DEM10p, DEM50p, DEM90p attributes
+    - Added DepthCat (Depth Category), DepthCatSr (Source of category), and DEMSr (DEM source) attributes
 
 ALGORITHM:
     1. For each reef polygon:
-       a. Extract all raster values that fall within the polygon boundary
-       b. Calculate 10th, 50th (median), and 90th percentile values from these extracted pixels
+       a. Extract all raster values within the polygon boundary
+       b. Calculate 10th, 50th (median), and 90th percentile values from these pixels
        c. For polygons smaller than a single pixel or without valid data:
           - Use the value at the polygon's centroid as an approximation
     2. Add the calculated statistics as attributes to the polygons
-    3. Determine depth category based on DEM90p value (90th percentile):
-       - Very Shallow: >= -2.5m
-       - Shallow: -30m to -2.5m
-       - Deep: < -30m
-    4. Identify which source DEM dataset was used for each polygon
-    5. Save the enhanced dataset to a new shapefile
+    3. Assign depth category (DepthCat) using the following logic:
+       - If DepthCat is already set, preserve it
+       - Otherwise, apply rule-based overrides using RB_Type_L3, Attachment, and OrigType fields
+         (e.g., certain types/attachments force 'Land', 'Intertidal', or 'Surface')
+       - If no rule applies, assign category based on DEM90p value:
+         * Very Shallow: >= -2.5m
+         * Shallow: -30m to -2.5m
+         * Deep: < -30m
+    4. Record the source of the depth category (DepthCatSr) as either the rule or DEM source
+    5. Record the DEM source used for each polygon (DEMSr)
+    6. Save the enhanced dataset to a new shapefile
 
 HANDLING SPECIAL CASES:
     - Small reefs (sub-pixel): Uses centroid sampling to get the nearest value
@@ -41,6 +46,7 @@ NOTES:
     - Negative values represent depth below sea level
     - The 90th percentile value represents the highest/shallowest point within each reef
     - The 10th percentile represents the deepest point within each reef
+    - Rule-based overrides are used to improve classification for certain reef types/attachments
 """
 
 import os
@@ -304,7 +310,7 @@ def main():
             orig_type = str(row.get('OrigType', '')).strip()
             est_depth_cat = determine_depth_category(row['DEM90p'])
 
-            # Apply rules. These are to compensate for imperfect edstimates from the DEM.
+            # Apply rules. These are to compensate for imperfect estimates from the DEM.
             rule_applied = False
             # Coral Reef, Fringing: If estimated is 'Deep', set to 'Shallow'
             if rb_type == 'Coral Reef' and attachment == 'Fringing':
