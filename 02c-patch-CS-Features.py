@@ -6,7 +6,7 @@ Patches the Coral Sea Features shapefile by:
 2. Removing the attribute 'Stage'
 3. Rounding AvArea_km2 to 6 decimal places
 4. Creating an attribute 'OrigType' with values from 'RB_Type_L3'
-5. Merging reef features with non-overlapping atoll platforms
+5. Converting the Atoll Platforms dataset into features by removing areas overlapping with reefs (i.e., cutting out reefs from platforms, leaving non-overlapping platform features)
 6. Translating RB_Type_L3 from v0-3 to v0-4 using a crosswalk table after merging
 """
 
