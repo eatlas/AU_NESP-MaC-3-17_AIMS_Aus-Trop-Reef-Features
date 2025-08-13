@@ -89,24 +89,19 @@ downloader.download_and_unzip(direct_download_url, 'NW-Aus-Feat_v0-4', flatten_d
 
 
 # BATHYMETRY DATASETS
-
+# These three datasets were replaced by the Multi-resolution bathymetry composite surface for Australian waters (EEZ)
+# dataset. They are left here for reference only.
 # --------------------------------------------------------
 # Beaman, R. 2023. AusBathyTopo (Torres Strait) 30m 2023 - A High-resolution Depth Model (20230006C). 
 # Geoscience Australia, Canberra. https://dx.doi.org/10.26186/144348
-direct_download_url = 'https://files.ausseabed.gov.au/survey/Australian%20Bathymetry%20Topography%20(Torres%20Strait)%202023%2030m.zip'
-downloader.download_and_unzip(direct_download_url, 'TS_GA_AusBathyTopo-30m_2023')
+# direct_download_url = 'https://files.ausseabed.gov.au/survey/Australian%20Bathymetry%20Topography%20(Torres%20Strait)%202023%2030m.zip'
+# downloader.download_and_unzip(direct_download_url, 'TS_GA_AusBathyTopo-30m_2023')
 
 # --------------------------------------------------------
 # Beaman, R.J. 2017. AusBathyTopo (Great Barrier Reef) 30m 2017 - A High-resolution Depth Model 
 # (20170025C). Geoscience Australia, Canberra. http://dx.doi.org/10.4225/25/5a207b36022d2
-direct_download_url = 'https://files.ausseabed.gov.au/survey/Great%20Barrier%20Reef%20Bathymetry%202020%2030m.zip'
-downloader.download_and_unzip(direct_download_url, 'GBR_GA_Bathymetry-30m_2017')
-
-# --------------------------------------------------------
-# Geoscience Australia. (2024).AusBathyTopo (Australia) 250m 2024 - A national-scale depth model (20240011C). 
-# https://doi.org/10.26186/150050
-direct_download_url = 'https://files.ausseabed.gov.au/survey/AusBathyTopo%20(Australia)%202024%20250m.zip'
-downloader.download_and_unzip(direct_download_url, 'AusBathyTopo-250m_2024')    
+# direct_download_url = 'https://files.ausseabed.gov.au/survey/Great%20Barrier%20Reef%20Bathymetry%202020%2030m.zip'
+# downloader.download_and_unzip(direct_download_url, 'GBR_GA_Bathymetry-30m_2017')
 
 # --------------------------------------------------------
 # Lebrec, U., Paumard, V., O’Leary, M. J., & Lang, S. C. (2021). Towards a regional high-resolution bathymetry 
@@ -114,8 +109,14 @@ downloader.download_and_unzip(direct_download_url, 'AusBathyTopo-250m_2024')
 # datasets. Earth System Science Data, 13(11), 5191–5212. https://doi.org/10.5194/essd-13-5191-2021
 # https://ecat.ga.gov.au/geonetwork/srv/eng/catalog.search#/metadata/144600
 # Data: https://doi.org/10.26186/144600
-direct_download_url = 'https://ausseabed-public-warehouse-bathymetry.s3.ap-southeast-2.amazonaws.com/L3/1d6f5de4-84ff-4177-a90d-77997ba8d688/North_West_Shelf_DEM_v2_Bathymetry_2020_30m_MSL_cog.tif'
-downloader.download_only(direct_download_url, 'NWS-DEM-30m_2021') 
+# direct_download_url = 'https://ausseabed-public-warehouse-bathymetry.s3.ap-southeast-2.amazonaws.com/L3/1d6f5de4-84ff-4177-a90d-77997ba8d688/North_West_Shelf_DEM_v2_Bathymetry_2020_30m_MSL_cog.tif'
+# downloader.download_only(direct_download_url, 'NWS-DEM-30m_2021') 
+
+# --------------------------------------------------------
+# Geoscience Australia. (2024).AusBathyTopo (Australia) 250m 2024 - A national-scale depth model (20240011C). 
+# https://doi.org/10.26186/150050
+direct_download_url = 'https://files.ausseabed.gov.au/survey/AusBathyTopo%20(Australia)%202024%20250m.zip'
+downloader.download_and_unzip(direct_download_url, 'AusBathyTopo-250m_2024')    
 
 # --------------------------------------------------------
 # Flukes, E., (2024). Multi-resolution bathymetry composite surface for Australian waters (EEZ). 
