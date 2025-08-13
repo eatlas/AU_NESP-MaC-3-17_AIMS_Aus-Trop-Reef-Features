@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 Merges three shapefiles (CS-Features, TS-GBR-Features, NW-Aus-Features) into one output shapefile.
-All shapefiles are in EPSG:4326. The resulting shapefile has attributes corresponding to the 
+All shapefiles are in EPSG:4283. The resulting shapefile has attributes corresponding to the 
 superset of the attributes from the input shapefiles.
 """
 
