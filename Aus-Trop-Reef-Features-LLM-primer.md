@@ -48,6 +48,9 @@ Sovereignty fields allow convenient filtering to the Australian EEZ and record c
 ## Reef boundary type classification scheme
 Each of the reef features mapping in this dataset have been classified as part of the Reef Boundary Type classification scheme, which is recorded as RB_Type_L3, RB_Type_L2 and RB_Type_L1 attributes. This scheme is heirarchical with RB_Type_L3 providing the most detail (indicating sub types of coral reef and sub types of rocky reefs). This schema provides details about the following attributes `RB_Type_L3`, `Attachment`, `DepthCat` and `DepthCatSr` Full details of this classification can be found by reviewing the LLM Primer: https://raw.githubusercontent.com/eatlas/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/refs/heads/main/Reef-boundary-type-scheme-LLM-primer.md
 
+## Coral Reef Bank
+The definition for this feature type can be found in https://raw.githubusercontent.com/eatlas/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/refs/heads/main/Reef-boundary-type-scheme-LLM-primer.md
+
 ## Core schema you can rely on
 The attribute model is designed to be compact for manual digitisation and then expandable via cross-walks.
 
