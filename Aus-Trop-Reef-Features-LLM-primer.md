@@ -2,7 +2,7 @@
 
 This primer gives an LLM enough context to write analysis code against the Australian Tropical Reef Features dataset without repeating long descriptions. It summarises what the dataset is, how it was built, what the key attributes mean, and the main caveats. It also highlights items that are intentionally omitted here so that users know when to consult the full documentation.
 
-## Primer version 0.11
+## Primer version 0.12
 
 ## What this dataset is
 
@@ -48,10 +48,10 @@ Depth category expresses the approximate depth of the shallowest portion of a fe
 Sovereignty fields allow convenient filtering to the Australian EEZ and record cross boundary shares for features intersecting EEZ limits. Sovereignty is supplied for research convenience and is not an official boundary statement.
 
 ## Reef boundary type classification scheme
-Each of the reef features mapping in this dataset have been classified as part of the Reef Boundary Type classification scheme, which is recorded as RB_Type_L3, RB_Type_L2 and RB_Type_L1 attributes. This scheme is heirarchical with RB_Type_L3 providing the most detail (indicating sub types of coral reef and sub types of rocky reefs). This schema provides details about the following attributes `RB_Type_L3`, `Attachment`, `DepthCat` and `DepthCatSr` Full details of this classification can be found by reviewing the LLM Primer: https://raw.githubusercontent.com/eatlas/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/refs/heads/main/Reef-boundary-type-scheme-LLM-primer.md
+Each of the reef features mapping in this dataset have been classified as part of the Reef Boundary Type classification scheme, which is recorded as RB_Type_L3, RB_Type_L2 and RB_Type_L1 attributes. This scheme is heirarchical with RB_Type_L3 providing the most detail (indicating sub types of coral reef and sub types of rocky reefs). This schema provides details about the following attributes `RB_Type_L3`, `Attachment`, `DepthCat` and `DepthCatSr` Full details of this classification can be found by reviewing the LLM Primer: https://github.com/eatlas/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/blob/main/Reef-boundary-type-scheme-LLM-primer.md
 
 ## Coral Reef Bank
-The [definition for this feature type](https://raw.githubusercontent.com/eatlas/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/refs/heads/main/Reef-boundary-type-scheme-LLM-primer.md)
+The [definition for this feature type](https://github.com/eatlas/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/blob/main/Reef-boundary-type-scheme-LLM-primer.md)
 
 ## Core schema you can rely on
 The attribute model is designed to be compact for manual digitisation and then expandable via cross-walks.
