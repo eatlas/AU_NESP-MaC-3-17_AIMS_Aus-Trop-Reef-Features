@@ -4,7 +4,7 @@ This primer distils the essential concepts, definitions and rules behind the Ree
 
 ## Where is this used
 This classification scheme is used in the following datasets:
-- Lawrey, E., Bycroft, R. (2025). Australian Tropical Reef Features - Boundaries of coral and rocky reefs (NESP MaC 3.17, AIMS) (Version v0-1) [Data set]. eAtlas. https://doi.org/10.26274/4RRW-RR88. LLM Primer: https://raw.githubusercontent.com/eatlas/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/refs/heads/main/Aus-Trop-Reef-Features-LLM-primer_v0-1.md
+- Lawrey, E., Bycroft, R. (2025). Australian Tropical Reef Features - Boundaries of coral and rocky reefs (NESP MaC 3.17, AIMS) (Version v0-1) [Data set]. eAtlas. https://doi.org/10.26274/4RRW-RR88. LLM Primer: https://raw.githubusercontent.com/eatlas/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/refs/heads/main/Aus-Trop-Reef-Features-LLM-primer.md
 - Lawrey, E., Bycroft, R. (2025). North and West Australian Tropical Reef Features - Boundaries of coral reefs, rocky reefs and sand banks (NESP-MaC 3.17, AIMS, Aerial Architecture). [Data set]. eAtlas. https://doi.org/10.26274/xj4v-2739
 
 ## Purpose and scope
