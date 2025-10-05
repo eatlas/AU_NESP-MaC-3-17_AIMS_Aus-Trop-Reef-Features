@@ -2,6 +2,8 @@
 
 This primer gives an LLM enough context to write analysis code against the Australian Tropical Reef Features dataset without repeating long descriptions. It summarises what the dataset is, how it was built, what the key attributes mean, and the main caveats. It also highlights items that are intentionally omitted here so that users know when to consult the full documentation.
 
+## Primer version 0.11
+
 ## What this dataset is
 
 The dataset is a national scale compilation and standardisation of tropical reef features across Australia, combining four regional sources into one shapefile of 21,832 polygons. It maps coral reefs, rocky reefs and sedimentary banks across the Indian Ocean, Timor Sea, Gulf of Carpentaria, Torres Strait, Great Barrier Reef and Coral Sea. It aims to support national environmental accounting, marine habitat mapping, marine park planning, Traditional Owner sea country mapping and environmental impact assessment.
