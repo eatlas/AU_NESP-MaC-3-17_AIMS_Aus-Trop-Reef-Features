@@ -164,13 +164,73 @@ When reconciling shelf banks, consider merging Coral Reef Bank polygons with adj
 
 Only the core fields and the most common values are described here. The full dataset includes a complete data dictionary for all Seamap Australia levels, NVCL complexes, Queensland Intertidal and Subtidal attributes, full value enumerations for RB\_Type\_L3 including oceanic subclasses, exact cross-walk rules, full definitions and edge cases for Attachment logic, and detailed bathymetry source notes. This primer does not reproduce the complete list of RB\_Type\_L3 definitions, the detailed override logic applied to the GBR composite, the precise DEM sampling settings, or the complete set of known errata by region. For those details refer to the repository README, the metadata record and the Reef Boundary Type v0-4 classification document.
 
-## Minimal FAQs for agents
+## What is available in the data download
+The [data download directory](https://nextcloud.eatlas.org.au/apps/sharealias/a/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features) for the *Australian Tropical Reef Features* dataset is organised as follows:
 
-What does DepthCat represent and how is it derived? It is the depth class of the shallowest part of a feature. When derived, it is based on the DEM 90th percentile depth within the polygon.
-How do I filter to Australia only? Use Sovereign1 equals Australia and Sov1\_Perc above a threshold, for example 50.
-How do I get complete coral reef boundaries? Dissolve features by the RB_Type_L2 classifications. This will merge all coral reef Coral Reef, Coral Reef Flat and, where applicable, Coral Reef Bank that are connected and represent the same structure.
-Are areas precomputed? Yes, `Area_km2` is computed in EPSG 3112 and should be used for totals.
-Are GBR boundaries accurate? They are serviceable for national scale summaries but locally coarse. Many boundaries remain hundreds of metres off, with some exceeding 1 km.
+- v0-1
+  - Reef-Boundary-Classification-v0-4.pdf
+  - in
+    - Aus-Trop-Reef-Features_Boundary.geojson
+    - Aus-Trop-Reef-Features_Boundary.shp
+    - Aus-Trop-Reef-Features_Regions.shp
+    - Complete-GBR-ExtraFeatures.shp
+    - Complete-GBR-FeatType-Override.shp
+  - out
+    - AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_v0-1.shp
+  - previews
+    - DepthCat-preview.png
+    - Preview-NVCL.png
+    - Preview-RB_Type_L3.png
+
+### Notes on File Types
+
+* Each **shapefile** (`.shp`) is actually a collection of files with the same base name and extensions:
+
+  * `.cpg`, `.dbf`, `.prj`, `.qmd`, `.shp`, `.shx`
+* These are grouped as one logical dataset but are shown here by their `.shp` entry.
+
+### Direct Download Links
+
+Files and directories can be downloaded directly from NextCloud using a crafted URL pattern:
+
+```
+https://nextcloud.eatlas.org.au/s/{download_id}/download?path={URL-escaped parent path}&files={filename or directory name}
+```
+
+Paths and filenames need to be URL escaped so that spaces become `%20` and path slashes `/` become `%2F`
+* For this dataset, the `download_id` is:
+
+```
+dQeoxzja6tCYSko
+```
+
+#### Examples
+
+**Download a file**
+To download `Aus-Trop-Reef-Features_Boundary.shp` located in `v0-1/in`:
+
+```
+https://nextcloud.eatlas.org.au/s/dQeoxzja6tCYSko/download?path=%2Fv0-1%2Fin&files=Aus-Trop-Reef-Features_Boundary.shp
+```
+
+**Download a directory**
+To download the entire `v0-1/in` directory:
+
+```
+https://nextcloud.eatlas.org.au/s/dQeoxzja6tCYSko/download?path=%2Fv0-1&files=in
+```
+
+* Downloading a **directory** will return a **zip file** containing that directory and all its contents.
+
+---
+
+## FAQ
+
+- What does DepthCat represent and how is it derived? It is the depth class of the shallowest part of a feature. When derived, it is based on the DEM 90th percentile depth within the polygon.
+- How do I filter to Australia only? Use Sovereign1 equals Australia and Sov1\_Perc above a threshold, for example 50.
+- How do I get complete coral reef boundaries? Dissolve features by the RB_Type_L2 classifications. This will merge all coral reef Coral Reef, Coral Reef Flat and, where applicable, Coral Reef Bank that are connected and represent the same structure.
+- Are areas precomputed? Yes, `Area_km2` is computed in EPSG 3112 and should be used for totals.
+- Are GBR boundaries accurate? They are serviceable for national scale summaries but locally coarse. Many boundaries remain hundreds of metres off, with some exceeding 1 km.
 
 ## File and build facts
 
