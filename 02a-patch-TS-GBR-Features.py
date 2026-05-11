@@ -2,6 +2,18 @@
 Australian Tropical Reef Feature Patching Script
 ===============================================
 
+This script was used for v0-1 of the Australian Tropical Reef Features dataset. For this 
+version was made a series of quick corrections to the original TS-GBR-Features dataset.
+We used a point shapefile to indicate classification changes (Bank, Rock) and features to be 
+removed or replaced (Move, Reshape, Merge, Remove). This was quick, but had the limitation of
+not facilitating the setting of all the reef attributes, such as the uncertainty attributes, 
+the reef attachment attribute and the depth attributes. For v0-9 onwards we shifted to
+remapping each reef that was to be modified. i.e. to change the classification we remap the
+reef with full attributes set. Rather than simply move a feature, we remap the feature.
+
+This script is provided for historical reference, but is only relevant for v0-1 of the dataset. 
+For later versions see 02a-patch-TS-GBR-Features.py. 
+
 This script applies spatial and attribute corrections to the Torres Strait and 
 Great Barrier Reef Features dataset (TS-GBR-Features). It processes three input files:
 
