@@ -1,0 +1,201 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+---
+
+## [Unreleased]
+
+### Added
+- Added `01b-download-sentinel2.py` so that the Sentinel 2 imagery can be downloaded easily. Also added `01c-create-virtual-rasters.py` to make setting up the virtual rasters for the Sentinel 2 imagery easy.
+
+### Changed
+- `01a-download-input-data.py`: switched from the local `data_downloader.py` module to the published [`data-downloader`](https://github.com/open-AIMS/data-downloader) library (v1.1.0). The two direct-download calls previously using `download_only()` were updated to `download()` with explicit destination paths.
+- `environment.yml`: added `pip` dependency and a `pip:` section to install `data-downloader` from GitHub (`git+https://github.com/open-AIMS/data-downloader@v1.1.0`).
+
+### Removed
+- `data_downloader.py`: local copy of the downloader helper, superseded by the published library above.
+
+### Notes
+#### 2026-05-08
+I started looking at Torres Strait and improvements that should be made. The majority of the reefs are reasonably well mapped and do not need adjustments. We did however find that many of the sand banks in the northern western region of the Torres Strait have moved since the last time the reefs were mapped. In many cases they have moved up to 400 m. Additionally there were some smaller sand banks that were previously missed. We used the Shallow mask VHigh-High automated masking to act as a guide for what should be included, but also to create a draft for updated outlines for about 30 sand banks. While the automated mapping had done reasonably well one the rough shape on many of the sand banks there was considerable noise in the boundaries in most places. I therefore I copied over the features that could be used with minimal editing. We should therefore consider that we only updated probably 10% of these sand banks. We also found a small number (~10) small rocky / sediment reefs at the far northern region on the PNG side of the border. 
+The most significant change to the reef outlines were in the reefs between Masig, Darnley and Murray Islands. Here there are a lot of reefs that seem to be built on antecedant platforms that appear to be heavily eroded. It is like a platform formed, then it eroded, then there was regrowth and so you get the boundary of a fairly rounded reef structure, but it is made up from a chaotic spikey reefs. Unlike the coral atolls of the Coral Sea there dpes not appear to be any lagoonal structure, i.e. no preference for faster regrowth on the outer edges leading to a rim around the reef. This might be because these reefs are in such a protected matrix of reefs that prevented prevaling breaking waves on their outer edge. These reef structures are unique in Australia. The base of these platforms is between -20 - -15 m and appears to be mainly sediment. These features are at the limit of the visibility of the current satellite imagery, however the bathymetry for this section of Torres Strait is good. Based on the characteristics of the bathymetry I am assuming that these regions were scanned with Lidar, with a maximum depth penetration of about 30 m. The bathymetry lines up well with what is visible in the satellite imagery and so we used the bathyemtry (MultiRes-Bathy-EEZ_2024) to map these reef boundaries. In many cases this new reef mapping combines together multiple preexisting shallower portions of these reefs. 
+
+- Time: 52 min 2081 features 131 remove, 31 move 3.42 MB
+
+
+#### 2026-05-07
+We spent time continuing to map up the coast to Mackay. The goal was to ensure that the classification of the reef features was at least as good as the previous version. This meant ensuring that every feature that had been marked as a rocky reef or a sand sand was mapped using the new schema, rather than the old method of tagging each existing reef boundary with a classification. We found that a lot of inshore rocky reefs had been missed in the quick classification that was done for v0-1. We used the Sentinel 2 imagery along with historic imagery from Google Earth and Queensland Globe. The Queensland globe made the biggest difference because a lot of the imagery available is aerial imagery with a resolution of 10 - 20 cm. Additionally this aerial imagery is often taken at low tide, giving the best indication of the features. We have lent heavily on the Queensland Globe imagery for the correct interpretation of the rocky reefs and the presence of near shore fringing reefs. We noticed that quite a few of the GBR features that we had previously marked for deletion were infact valid features, just mapped poorly. Our method now is to review each of these removal commands with additional sources of information, in particular the marine charts, and whether the feature is named. Where a feature is named then it is more likely that the feature exists somewhere near by. The marine charts often provide a good indication of where that feature is. We then check all available sources of imagery (Google Earth, Sentinel 2 Low Tide, Sentinel 2 All Tide, Queensland globe) to determine the likely location of the feature. We will only remove a feature if there is good evidence that the feature does not exist, i.e. we can see to the seafloor and there is just flat sand. In many cases the features being marked as not existing are in fact sand banks. In the case of Downward Patches off Mackay we had initially marked these areas as not containing reefs. Once we realised that they were named features we looked more closely and found what look like low sand banks. We mapped these features. Looking at the marine charts did not provide much detail, other than to suggest that these features had a relief of about 2 - 5 m. The shape and spacing of these features is unusual, suggesting that they might be sand banks that have a rocky foundation (i.e. sand piling up over low rocky ridges). There is no visible indication of exposed rock and so these were classified as sand banks with a low type confidence.
+
+Just north of Mackay is a large region (16 x 20 km) that contains extensive sand banks. These features are more prominant than Downward patches, but were not included in the original mapping. For consistancy we included them in the new mapping. The AU NESP MaC 3.17 Shallow mask VHigh-Hiv V1-1 dataset was used to provide a draft mapping of these sand banks. Manual refinements were made to draft features to better represent the sharp points of the sand banks. 
+
+Mapping the inshore reefs along the GBR is significantly different due to the availability of high resolution aerial imagery from Queensland Globe. In most fringing reefs along the Queensland coastline are covered by the aerial surveys conducted by the Queensland government. These are typically 10 - 20 cm in resolution and often timed to align with low tide. Additionally these images are taken every several years and so there are multiple potential candidate images to understand the reef being studied. We find that using the Queensland Globe imagery (SISP) we find that there is often fine rocky reef features that are not visible in the Sentinel 2 imagery. This means that the extent of rocky reefs is often slightly larger than the visible extent in the Sentinel 2, or at least is close to the visible edge, just above the noise floor of the imagery. 
+It is therefore vital that all sources of imagery available are utilised to achieve the best mapping. When mapping the new features I am targetting an error tolerance of less than 20 - 50 m in areas where visibility is good and as good as possible (often 100 m+) when the visibility falls off. 
+
+While we are using Queensland globe imagery we are not bringing it into QGIS, but simply using the historic imagery feature to find the clearest imagery, then use this to understand the seascape. We then find the matching features in the much lower resolution Sentinel 2 imagery.
+
+- Time: 2 hr 42 min 1941 features 133 removes, 31 moves, 3.16 MB
+- Time: 45 min 1954 features 133 removes, 31 moves
+- Time: 1 hr 24 min 1976 features 133 removes, 31 moves
+- Time: 1 hr 12 min 2018 features 131 removes, 31 moves, 3.37 MB
+
+
+#### 2026-05-06
+Continuing to map the rocky reefs along the Queensland coastline in the northern parts of Broad Sound.
+
+- Time: 41 min 1832 features 141 remove 25 move 
+- Time: 1 hr 12 min 1868 features 143 remove 31 move
+
+#### 2026-05-05
+Spent time mapping the rocky reefs in Broad Sound, particularly Aquila Island, Flock Pigeon Island, and Claireview Bluff. All of these reefs are in a high turbid and environment with very poor water visibility. Google Earth historic imagery was used to determine intertidal rocky reef structures as identifying them solely from the Sentinel 2 would be error prone. In some parts the dark soil leads to sediment areas that match the colour of the rocky reefs, and so the high resolution imagery is the only reliable way to confirm the presence of the rocky reef. In all cases the Sentinel 2 imagery was used for the feature tracing, while the Google Earth imagery was used for classification.
+
+The goal is to map the features that have been previously marked with classification changes with Complete-GBR-Feature-Override, so that we can release an updated version of the dataset that does not have any feature classification regressions.
+
+- Time 1 hr 12 min 1779 features 142 remove 25 move
+- Time 1 hr 33 min 1819 features 141 remove 25 move
+
+#### 2026-05-04
+In this session the goal was to resolve the alignment between the existing GBR mapping and the new mapping, flagging reefs to be removed and reefs that are moved. Manually making moved reefs is only required when the new mapping of a feature does not overlap at all with the old reef. This typically occurs when the old mapping has a high positional error. To record the movement we tag the reef in the old mapping with a 'Move' point, then record the CODE of the reef being moved into the newly mapped version. This will allow us to track this movement in code. There are some occassions where a reef being moved overlaps with a newly mapped reef, but the wrong one. An example of this is Twin Reefs (North) 11-193-101-104 and Twin Reefs (South) 11-193-102-104 just south of Hicks Reef. We could tell from the spacing and size of the old mapped reefs that they should be mapping to a pair of nearby, but not overlapping reefs. The old Twin Reefs (North) does however overlap with a new small reef. This means that during processing we should apply the move commands, before we do the CODE assignment due to intersection.
+
+I am still finding it difficult to decide to what depth sand banks should be mapped, particularly when then are sand banks that are fringing and near the coast. This is particularly accute when there is a slope gradient defining one or more edges of the sand bank. In some cases it is difficult to say what constitute a shallow undulating sandy seafloor and what is the edge of a sand bank. Where the sand bank is close to the shore we use the low tide red channel as a guide for areas that really should be included.
+
+When determining whether a feature should be removed the marine charts are checked to see if they have determined the location of the feature in question. Often the feature is actually up to 750 m from the acutal mapped reef and so looking at the satellite imagery we would often consider that the feature should be deleted, however the actual feature might be significant out of place in a location where we didn't search. In some cases the marine charts indicated that a feature might still exist, but we could not disprove the feature from existings due to poor image clarity. In these cases we left the feature as is. Where we were considering a move operation we would check if the feature had a name. If they did then we would look for the same name on the marine charts to see if it lined up with the expected move match.
+
+I am finding that in far north GBR (north of Princess Charolett Bay) that the water visibility is low in the mid self, in the order of 10 m. We can tell this by comparing to the AHo Marine Charts. This makes quite a few of the features that we had maked as reefs that should be removed are infact features that are just below our visibility limit. A large part of this region has been scanned by Lidar and so the bathymetry data is better than the satellite imagery. Where there is a strong alignment between the satellite imagery and the bathymetry we have more confidence that the bathymetry in that region is good and can be relied on. We therefore used the bathymetry to refine the boundaries of a few reefs, allowing their boundary to be significantly expanded. 
+
+Where there is good high resolution bathymetry it is fine to map the reef boundaries from it, provided that the feature is visible in the satellite imagery for parts of the feature. This helps to confirm the feature type and the quality of the bathymetry.
+
+Looking in Torres Strait we see that the bathymetry across most of the central and eastern side is high quality. We used this to find a number of small reefs that we had missing in the original reef mapping. 
+
+In v0-1 of the Australian Tropical Reef Features we tagged existing mapped reefs with a basic classification using the  `Complete-GBR-FeatType-Override` point shapefile. The new approach is to replace features with `AIMS_GBR-TS-Features_Edit_v1-0` shapefile, combined with the `GBR-FeatType_Reef-removals` to indicate moves and removals. The new mechanism allows all the reef mapping attributes used in the North and West Australian and Coral Sea reef mapping. The downside is that we no longer have a simple and quick way to ensure that sand banks in the original GBR Features are tagged as such, rather than being considered as hard substrate reefs.
+Most of these sand banks can be found in Broad Sound. In v0-1 we tagged each of these features as sand banks. To upgrade to the new approach we need to redraw these features. To speed up the remapping we utilised the AU_NESP-MaC-3-17_AIMS_Shallow-mask features.
+Lawrey, E. (2025) Semi-automated Shallow Marine Mask for Northern Australia and GBR Derived from Sentinel-2 Imagery (NESP MaC 3.17, AIMS) (Version 1-1) [Data set]. eAtlas. https://doi.org/10.26274/x37r-xk75
+
+We manually selected sand banks that matched well with the satellite imagery. These were copied to AIMS_GBR-TS-Features_Edit_v1-0. Their attributes were then set. Using this technique we managed to quickly digitise most of the sand banks in Broad Sound, and spent time mapping the rocky and coral reefs around some of the islands.
+
+The goal is to get the dataset ready for integrating the new mapping and the existing GBR Features dataset.
+
+- Time: 36 min 1596 features 150 removes and 9 moves
+- Time: 33 min 1607 features 149 removes and 16 moves
+- Time: 33 min 1615 features 144 removes 18 moves
+- Time: 16 min 1644 features 145 removes 18 moves
+- Time: 1 hr 37 min 1737 features 142 removes 18 moves 2.50 MB
+- Time: 24 min 1748 features 143 removes 24 moves 2.52 MB
+
+#### 2026-05-03
+Digitising reefs on the GBR, predominantly mid shelf reefs in far north Queensland (Lizard Island and north). We found that the satellite imagery combined with the 30 m resolution bathymetry data provided strong clues for reef boundaries. We find that quite a few of the reefs have extensive deep coral meadows. These are just visible in the blue channel as a fine grain texture.
+
+Improved the reefs around the Keppel Islands.
+
+- Time: 2 hr 1509 features 2.12 MB
+- Time: 1 hr 14 min 1582 features 2.23 MB
+
+#### 2026-04-23
+Continuing to digitise the reefs along the coastline, working down from Cape Weymouth. We find that the bay 8 km south of Cape Direction contains many scattered reefs. Each of these reefs appears to be mid-way between rocky reefs and coral reefs. It is difficult to tell whether these are rocky reefs that have been overgrown with coral. They show some signs of outward growth. Looking on Google Earth imagery does not clarify the classification. All of these features were mapped as coral reefs, but with a low type confidence.
+
+Looking at Night Island (13°10'54.51"S 143°34'41.10"E) we noticed that the mangroves on the island have seen a dramatic die back, probably 90%. Looking through the Google Earth history imagery we can see that the die back occurred predominantly between 2003 - 2006, after which a large proportion of the mangroves were dead. These slowly broken down over 20 years. The island still has a centre that is dark red from the tannins left behind from the mangroves breaking down. The dark red brown in the Sentinel 2 imagery is an indication of mangrove die back. Using this we can see there is also a large die back on Hicks Island, although looking on Google Earth historic imagey this seems to now be a drowned inner mangrove area that is very high in tannis, and thus dark red water.
+
+Just made a bit of a depressing discovery. I have been mapping the reefs in northern Cape York (about 200 - 300 km from the tip) and found that the water has a lot of tannins in the water, the brown breakdown of vegetable matter. It is enough to make it difficult to see all the inshore reefs. I was wondering whether this is a quirk of this location as I had not seen this much tannins any where else across northern Australia. After investigating in the historic Google imagery it appears that all the tannins are from massive mangrove die back and die back of the vegetation in the vegetation associated with the sand dunes near Cape Greville.
+
+We find that the large mangrove system at the mouth of the Lockhart River suffered a large die back sometime between Nov 2018 and Dec 2023. More that 50% of mangrove died, predominantly the middle portion of the mangrove. The die back size is approximately 50 km2.
+
+Moving more north up the coast we find that the mangroves associated with Kangaroo River, Hunter Inlet (12°21'15.78"S 143°06'45.86"E) has also experienced die backs, although not a seriously as the Lockhart region. The die back seems to be about 20% of the ~20 km2 mangrove area.
+
+The southern most extent of the die back seems to be around Campbell Point with some mangrove die back. The total width of the dieback region is about 200 km and so I am not sure this is all due to a cyclone. Cyclone Trevor pass over this region in 2019 and so might be the cause of the Lockhart river mangrove die back. 
+
+We find that in the far north coast that there is a wide shallow sand wedge that has various reefs poking through. It appears as though there are rocky reefs that some have formed coral reefs. These formations are up to 3 km from the coastline, but have the asymetric shape associated with fringing coral reefs, i.e. they have a leading ocean side that is rounded by lateral growth and a broken up landward side. Where these reefs have this structure we classified them as fringing, even though they were not very close to the coast. Most of these reefs are growing in very shallow conditions with the sand wedge close to the coast being less than 5 m LAT deep. We have therefore adjusted the classification of the fringing Attachment category to consider not just how close to an island the feature is, but also its structure.
+
+- Time: 1 hr 1 min 1352 features 348 km 1.91 MB
+- Time: 33 min 1382 features 
+- Time: 50 min 1415 features 380 km 1.99 MB
+- Time: 35 min 1441 features 390 km 2.04 MB
+- Time: 1 hr 1466 features 416 km 2.07 MB
+
+#### 2026-04-22
+Continuing to digitise reefs along the coastline of eastern Cape York. The water in this region is particularly green making it difficult to distinguish between some rocky reefs and fringing coral reefs. It seems like there are quite a few rocky reefs that are rubbly rocky reefs that have spread out leading to some shapes that closely follow rounded features of inshore fringing coral reefs. It is impossible to tell whether deeper parts of these reefs have significant coral growth. We also find a lot of inshore coral reefs that are distributed like rounded rock reefs. It is almost as though there were a bunch of low exposed rounded granite rocky reefs that coral has grown on and formed a coral reef. This is my imagination of these features. The imagery is quite poor as the tanins in the water make the visibility low, even though there is not much sediment. Additionally there are significant cloud artifacts making the imagery noisy. Reviewing the Google Earth history imagery did not provide much additional information about these features, other than confirming the rubbly rocky reef intertidal coastal areas.   
+
+It was noticed that a lot of the rivers in far north of Cape York, north of Cape Direction, and particularly around Cap Grenville that the rivers release a large amount of tannins (CDOM) into the water. This makes the water dark brown making it difficult to view the inshore reefs. In some places the tannis seem to stain the coastline red leading to a coast that almost looks like it has rocky features, but they are just the water. In addition to the tannins the water is highly green, as compared with the most of north and west Australia. 
+
+We see that on Sherrard Reef and Sherrard Island (-12.99 deg S, 143.61 deg E) this structure has raised thin structures that almost look like an oceanic atoll. It looks like the reef was raised and then the lagoonal area was eroded, resulting in raised ridges around the outside of the reef. It the water level rose again above current levels these hard exposed ridges would have coral growing on them.
+
+In this northern region we have a bunch of near shore reefs (less than 10 km from the coast) that are mature and completely infilled. Then in the mid-shelf we have larger but very fragmented reefs, then the outer mid-shelf there are halimeda banks and finally the ribbon reefs on the outer edge. These distinct reefs types all signal distinct historical environmental conditions. 
+
+##### **Time log**
+- Time: 1 hr 7 min 1125 features 123 km coastline from Cape York tip of 2950 km GBR coastline
+- Time: 1 hr 1177 features 165 km coastline from Cape York tip
+- Time: 58 min 1228 features 226 km coastline from Cape York tip
+- Time: 18 min 1251 features 254 km coastline from Cape York tip 1.76 MB shapefile (all files)
+- Time: 27 min 1275 features 289 km coastline 1.80 MB shapefile
+
+
+#### 2026-04-21
+We are gearing up to perform a large number of improvements to the GBR mapping. The original project goal was to integrate the 2025 remapping of the offshore GBR reefs by UQ, however this dataset is not yet released under an open license. While we can look at this dataset we cannot add it to the national reef mapping until the licensing is resolve. We will therefore  focusing on improving the inshore region. There are two reasons for this: 
+1. The existing inshore mapping is from the 1970 and before and so has considerable boundary and position errors. 
+2. UQ recently remapped the inshore areas (separately to the offshore mapping), however this remapping has considerable issues. It is more of a map of shallow areas than a reef mapping dataset. It is of significantly lower mapping scale than the other north and west Australian reef features mapping and it does not treat the different reef types (coral reefs, rocky reefs and sand bank) appropriately. We therefore see that reworking this region will not be redundent work.
+
+In v0.1 of this dataset (Australian Tropical Reef Features) we applied a differential set of modifications to the existing GBR and Torres Strait reef mapping. The approach developed had the following issues:
+1. It only corrected the classifications to reef, rock, and sand and thus did not facilitate the full Reef Boundary Type classification scheme to be recorded.
+2. Modifications to features required double entry. First a point would be added to mark the feature being modified, then in a separate dataset the feature would be redrawn. To ensure these features were linked the CODE identifier of the first feature was copied to the redrawn version. While this did allow complete tracking of the modifications the workflow was awkward as a lot of the simple operations require a lot of mouse movements and clicks. Simple operations such as copying over the CODE would require, switching layers, switching tools, selecting the old feature, right clicking on the right attribute to copy, the switch layers again, etc. Many operations for a simple task. When there are thousands of modifications these awkward workflows really affect productivity.
+3. None of the uncertainty attributes of the Reef Boundary Type classification scheme can be recorded. As a result only defaults are applied to features. 
+4. The cross referencing of the CODEs requires the person doing the remapping to make a judgement call on what the CODE of the new feature should be. When there are ambiguous cases such as merging multiple existing reefs into a single larger reef, we applied a rule that the largest feature would retain the ID. The problem was that there was no alias tracking for the other features, and we have no authority to assign IDs to these features. That is the responsibility of GBRMPA.
+
+We therefore plan to switch to mapping the features directly, the same way as we did for the north and west mapping. We map each feature and assign it the following attributes: 'FeatConf', 'TypeConf', 'DepthCat', 'DepthCatSr', 'RB_Type_L3', 'Attachment', 'EdgeSrc', 'EdgeAcc_m'. We setup in QGIS Attribute Forms fields to help make is quick to fill in each form quickly and reliably.
+
+##### **New Rules**
+To ensure we can merge this new mapping into the existing mapping we will use the existing rules:
+1. Features in the new mapping replace all features that they overlap in the old mapping by at least 1% IoU. Using a small IoU helps to prevent features from being deleted where the overlap is very very small. This overlap test allows the remapping to understand what features were merged together or replaced.
+2. Where the replacement reef does not overlap the old reef mapping (this occurs when there are large positional errors in the old mapping), then we need to ensure the link between the replacement and the old feature. For this we will copy over the CODE value of the feature we are replacing. This is still awkward, however this should be a relatively infrequent adjustment.
+3. Where there is a false reef in the original mapping that needs to be removed then this done with a separate point shapefile that just indicates these removals. This is a subset of the operations recorded in the `Complete-GBR-FeatureType-Override.shp`. 
+
+This means that in the new mapping most features will not have a CODE assigned. This will only be allocated in post processing. Where a CODE is assigned in the replacement mapping it indicates that the original feature should be removed. Where no CODE is assigned then the feature is either a replacement, if it overlaps with any existing features, or a new reef feature. 
+
+This approach removes the capability to simply change the classification of an existing feature, without copying it over to the new mapping file. I don't think this is too much of a problem as most features need remapping their boundaries. It will just mean that existing reclassifications, done in v0-1, will need to be repeated.
+
+##### **Transition to new files**
+The steps in this adjustment were:
+1. Making a copy of Complete-GBR-ExtraFeatures to AIMS_GBR-Ts-Features_Edit_v1-0. 
+2. Adding attributes: 'FeatConf', 'TypeConf', 'DepthCat', 'DepthCatSr', 'RB_Type_L3', 'Attachment', 'EdgeSrc', 'EdgeAcc_m'
+3. Assigning the Value Map for each of these attributes based on the `in\QGIS-value-maps` to make the editing more efficient.
+4. Applying a cross walk from the FEAT_NAME classification to sensible attributes in RB_TYPE_L3. This was done using the field calculator.
+```
+CASE
+    WHEN "FEAT_NAME" = 'Reef' THEN 'Coral Reef'
+    WHEN "FEAT_NAME" = 'Rock' THEN 'Rocky Reef'
+    WHEN "FEAT_NAME" = 'Bank' THEN 'Sand Bank'
+    ELSE NULL
+END
+```
+5. Create the point shapefile to record reef removals. Use the Query Builder on `Complete-GBR-FeatType-Override` to retain just the removals:
+```
+"FEAT_NAME" = 'Remove'
+```
+Then export as `GBR-FeatType_Reef-removals.shp`, changing the attribute `FEAT_NAME` to `ACTION`.
+
+##### **Time log**
+- Time: 3 hr mapping setup. Coverting over the v0-1 to the v1-0 structure
+- Time: 1hr 10 min setting values for the RB_Type_L3 attributes.
+- Time: 48 min 1033 features 
+- Time: 1 hr 1067 features
+
+---
+
+## [v0.1] – 2025-10-09
+
+### Added
+- Available-download section in documentation.
+- LLM primer documents (`Aus-Trop-Reef-Features-LLM-primer.md`, `Reef-boundary-type-scheme-LLM-primer.md`) with hyperlink support for chaining primers.
+
+### Changed
+- General documentation and docstring improvements across processing scripts.
+- `01a-download-input-data.py`: replaced three separate regional bathymetry downloads (AusBathyTopo GBR 30m, AusBathyTopo Torres Strait 30m, North West Shelf DEM 30m) with the single national [Multi-resolution bathymetry composite surface for Australian waters (EEZ)](https://metadata.imas.utas.edu.au/geonetwork/srv/eng/catalog.search#/metadata/69e9ac91-babe-47ed-8c37-0ef08f29338a) dataset (shallow + mesophotic layers).
+- `05-add-depth.py`: refactored depth estimation to use the MultiRes-Bathy-EEZ_2024 dataset instead of the regional bathymetry composites.
+- Island/sovereignty assignment extended to also cover Torres Strait features.
+- `DepthCat` manual overrides added based on `RB_Type_L3` and other attributes.
+- Cleaned up and removed unused scripts in preparation for publication.
+
+---
+
+[Unreleased]: https://github.com/open-AIMS/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/compare/v0.1...HEAD
+[v0.1]: https://github.com/open-AIMS/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/releases/tag/v0.1
