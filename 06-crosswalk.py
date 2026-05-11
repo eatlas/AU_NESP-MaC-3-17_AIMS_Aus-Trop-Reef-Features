@@ -35,8 +35,8 @@ Inputs:
     - Crosswalk table: data/v0-4/in/RB_Type_L3_crosswalk.csv
 
 Outputs:
-    - Enriched features shapefile: working/11/NW-Features_v0-4.shp
-    - Unmatched features shapefile (if any): working/11/Feature-mismatched.shp
+    - Enriched features shapefile: working/06/TS-GBR-CS-NW-Features_{version}.shp
+    - Unmatched features shapefile (if any): working/06/Feature-mismatched.shp
 
 Notes:
     - Requires the 'fiona' engine for shapefile writing to support custom field lengths.
