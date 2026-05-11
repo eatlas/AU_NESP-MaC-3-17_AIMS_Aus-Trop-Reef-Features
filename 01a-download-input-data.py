@@ -73,19 +73,20 @@ replace_prj_with_epsg_4283(gbr_shapefile)
 # Lawrey, E., Bycroft, R. (2025). Coral Sea Features - Dataset collection - Coral reefs, Cays, Oceanic 
 # reef atoll platforms, and Depth contours (AIMS). [Data set]. eAtlas. https://doi.org/10.26274/pgjp-8462
 # Reefs and Cays
-direct_download_url = 'https://nextcloud.eatlas.org.au/s/DcoZ33bMzeY5JaK/download?path=%2FReefs-Cays'
-downloader.download_and_unzip(direct_download_url, 'Coral-Sea-Feat', subfolder_name='Reefs-Cays', flatten_directory=True)
+direct_download_url = 'https://nextcloud.eatlas.org.au/s/DcoZ33bMzeY5JaK/download?path=%2Fv1-2%2FReefs-Cays'
+downloader.download_and_unzip(direct_download_url, 'CS-Feat_v1-2', subfolder_name='Reefs-Cays', flatten_directory=True)
 
 # Atoll Platforms
-direct_download_url = 'https://nextcloud.eatlas.org.au/s/DcoZ33bMzeY5JaK/download?path=%2FAtoll-Platforms'
-downloader.download_and_unzip(direct_download_url, 'Coral-Sea-Feat', subfolder_name='Atoll-Platforms', flatten_directory=True)
+direct_download_url = 'https://nextcloud.eatlas.org.au/s/DcoZ33bMzeY5JaK/download?path=%2Fv1-2%2FAtoll-Platforms'
+downloader.download_and_unzip(direct_download_url, 'CS-Feat_v1-2', subfolder_name='Atoll-Platforms', flatten_directory=True)
 
 # --------------------------------------------------------
 # Lawrey, E., Bycroft, R. (2025). North and West Australian Tropical Reef Features - Boundaries of coral reefs, 
 # rocky reefs, sand banks and intertidal zone (NESP-MaC 3.17, AIMS, Aerial Architecture). [Data set]. 
 # eAtlas. https://doi.org/10.26274/xj4v-2739
-direct_download_url = 'https://nextcloud.eatlas.org.au/s/ZbxtYci3A6WYnHc/download?path=%2Fv0-4'
-downloader.download_and_unzip(direct_download_url, 'NW-Aus-Feat_v0-4', flatten_directory=True)
+# TODO: Temporarily disabled until v1-0 is complete.
+#direct_download_url = 'https://nextcloud.eatlas.org.au/s/ZbxtYci3A6WYnHc/download?path=%2Fv1-0'
+#downloader.download_and_unzip(direct_download_url, 'NW-Aus-Feat_v1-0', flatten_directory=True)
 
 
 # BATHYMETRY DATASETS
@@ -125,12 +126,19 @@ downloader.download_and_unzip(direct_download_url, 'AusBathyTopo-250m_2024')
 # on 31 July 2025
 # These are 22GB and 37 GB files so they will take a while to download.
 direct_download_url = 'https://data.imas.utas.edu.au/attachments/69e9ac91-babe-47ed-8c37-0ef08f29338a/bathymetry/01_shallow_bathy.tif'
-downloader.download_only(direct_download_url, 'MultiRes-Bathy-EEZ_2024') 
+downloader.download(direct_download_url, os.path.join(downloader.download_path, 'MultiRes-Bathy-EEZ_2024', '01_shallow_bathy.tif'))
 
 # We need to mesophotic bathymetry for 30-70m depth range as a lot of deeper reefs are in this range.
 direct_download_url = 'https://data.imas.utas.edu.au/attachments/69e9ac91-babe-47ed-8c37-0ef08f29338a/bathymetry/02_mesophotic_bathy.tif'
-downloader.download_only(direct_download_url, 'MultiRes-Bathy-EEZ_2024') 
+downloader.download(direct_download_url, os.path.join(downloader.download_path, 'MultiRes-Bathy-EEZ_2024', '02_mesophotic_bathy.tif'))
 
+# --------------------------------------------------------
+# Australian Marine Parks
+# DCCEEW (2018). Australian Marine Parks (Version 10 Feb 2025) [Dataset]. Department of Agriculture, Water and the Environment. 
+# https://fed.dcceew.gov.au/datasets/erin::australian-marine-parks/about
+# Used for producing maps showing what reefs are in each marine park.
+direct_download_url = 'https://hub.arcgis.com/api/v3/datasets/2b3eb1d42b8d4319900cf4777f0a83b9_0/downloads/data?format=shp&spatialRefId=4283&where=1%3D1'
+downloader.download_and_unzip(direct_download_url, 'AU_DCCEEW_Australia-Marine-Parks_2025')
 
 # --------------------------------------------------------
 # Download the input data associated with this dataset. This includes all the manual edits that will
@@ -156,4 +164,4 @@ else:
 # --------------------------------------------------------
 # Remind the user that they have to manually download the dataset.
 # We cannot download automatically.
-print("Make sure you have downloaded the Union of the ESRI Country shapefile. See README.md for details.")
+print("Make sure you have downloaded the Union of the ESRI Country shapefile (EEZ-land-union_2024). See README.md for details.")
