@@ -48,7 +48,7 @@ Depth category expresses the approximate depth of the shallowest portion of a fe
 Sovereignty fields allow convenient filtering to the Australian EEZ and record cross boundary shares for features intersecting EEZ limits. Sovereignty is supplied for research convenience and is not an official boundary statement.
 
 ## Reef boundary type classification scheme
-Each of the reef features mapping in this dataset have been classified as part of the Reef Boundary Type classification scheme, which is recorded as RB_Type_L3, RB_Type_L2 and RB_Type_L1 attributes. This scheme is heirarchical with RB_Type_L3 providing the most detail (indicating sub types of coral reef and sub types of rocky reefs). This schema provides details about the following attributes `RB_Type_L3`, `Attachment`, `DepthCat` and `DepthCatSr` Full details of this classification can be found by reviewing the LLM Primer: https://github.com/eatlas/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/blob/main/Reef-boundary-type-scheme-LLM-primer.md
+Each of the reef features mapping in this dataset have been classified as part of the Reef Boundary Type classification scheme, which is recorded as RB_Type_L3, RB_Type_L2 and RB_Type_L1 attributes. This scheme is heirarchical with RB_Type_L3 providing the most detail (indicating sub types of coral reef and sub types of rocky reefs). This schema provides details about the following attributes `RB_Type_L3`, `Attachment`, `DepthCat` and `DepthCatSr` Full details of this classification can be found by reviewing the LLM Primer: https://github.com/eatlas/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/blob/main/Reef-boundary-type-scheme-LLM-primer.md. This same information is available in the data download as a PDF: Reef-Boundary-Classification-v0-4.pdf
 
 ## Coral Reef Bank
 The [definition for this feature type](https://github.com/eatlas/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features/blob/main/Reef-boundary-type-scheme-LLM-primer.md)
@@ -172,7 +172,6 @@ The [data download directory](https://nextcloud.eatlas.org.au/apps/sharealias/a/
   - in
     - Aus-Trop-Reef-Features_Boundary.geojson
     - Aus-Trop-Reef-Features_Boundary.shp
-    - Aus-Trop-Reef-Features_Regions.shp
     - Complete-GBR-ExtraFeatures.shp
     - Complete-GBR-FeatType-Override.shp
   - out
@@ -181,6 +180,17 @@ The [data download directory](https://nextcloud.eatlas.org.au/apps/sharealias/a/
     - DepthCat-preview.png
     - Preview-NVCL.png
     - Preview-RB_Type_L3.png
+    
+### File descriptions
+
+- **Reef-Boundary-Classification-v0-4.pdf**: Explanation of the Reef boundary classification scheme that provides details of key attributes. See [Reef boundary type classification scheme](#reef-boundary-type-classification-scheme).
+- **Aus-Trop-Reef-Features_Boundary.geojson**: The rough outer boundary of the study area considered in the reef mapping in a GeoJSON format. On the land side this has a rough in cut of the coastline to ensure that all mapped features are well inside the boundary. This This was produced for adding into the dataset metadata record. 
+- **Aus-Trop-Reef-Features_Boundary.shp**: Shapefile version of Aus-Trop-Reef-Features_Boundary.geojson.
+- **Complete-GBR-ExtraFeatures.shp**: Polygon reef boundaries to add or replace from the original source GBR Features dataset. This contains attributes:
+    - `CODE` to indicate which feature is being replaced, or NULL for a new feature. This matches the `CODE` attribute in the GBR Features dataset.
+    - `FEAT_NAME` classification to apply to the altered or new feature. Possible values: `Bank`, `Cay`, `Reef`, `Rock`.
+- **AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_v0-1.shp**: Shapefile that represents this dataset. This contains all the reefs (coral and rocky) for tropical Australia.
+- **previews**: These are preview maps to quickly understand the dataset. These are added to the metadata record.
 
 ### Notes on File Types
 
