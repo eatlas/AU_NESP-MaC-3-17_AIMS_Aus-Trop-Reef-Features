@@ -1,65 +1,27 @@
 """
-Australian Tropical Reef Feature Patching Script
-===============================================
+Australian Tropical Reef Feature Patching Script (v0-9+)
+========================================================
 
-This script was used for v0-1 of the Australian Tropical Reef Features dataset. For this 
-version was made a series of quick corrections to the original TS-GBR-Features dataset.
-We used a point shapefile to indicate classification changes (Bank, Rock) and features to be 
-removed or replaced (Move, Reshape, Merge, Remove). This was quick, but had the limitation of
-not facilitating the setting of all the reef attributes, such as the uncertainty attributes, 
-the reef attachment attribute and the depth attributes. For v0-9 onwards we shifted to
-remapping each reef that was to be modified. i.e. to change the classification we remap the
-reef with full attributes set. Rather than simply move a feature, we remap the feature.
+This script integrates newly mapped reef features (Reef Edit) with the existing
+GBR-TS features dataset. It replaces, removes and retains features as appropriate.
 
-This script is provided for historical reference, but is only relevant for v0-1 of the dataset. 
-For later versions see 02a-patch-TS-GBR-Features.py. 
+See 02a-patch-TS-GBR-Features_design.md for full rationale and design.
 
-This script applies spatial and attribute corrections to the Torres Strait and 
-Great Barrier Reef Features dataset (TS-GBR-Features). It processes three input files:
+Three integration scenarios are handled:
+  1. Overlap replacement — a new feature spatially overlaps old features and
+     replaces them.
+  2. Move — a new feature corresponds to an old feature that was mapped in the
+     wrong position; linked via CODE.
+  3. Removal — an old feature is a false positive, flagged by a point in the
+     remove-move shapefile.
 
-1. TS-GBR-Features: Contains the original feature geometries and attributes
-2. Override Points: Point shapefile specifying which features to modify and how
-3. Extra Features: Replacement and additional geometries to be added to the dataset
+Processing order: moves, then removals, then overlap replacements.
 
-The original TS-GBR-Features dataset as a CODE attributes that is 'mostly' a unique
-identifier for each feature. 
-
-The 'Complete-GBR-FeatType-Override' contains points that indicate overrides of the
-original types (Bank, Rock)and instructions for modifications (Move, Remove, Reshape, Merge).
-These points are linked with the input TS-GBR-Features dataset via a spatial join, i.e. 
-the points are matched with the features they intersect. 
-
-The 'Complete-GBR-ExtraFeatures' contains additional features that correspond to modifications
-or additional features. Where there is a Move, Reshape, or Merge override, the original feature 
-is removed and replaced with the ExtraFeature. The attributes of the original features are
-matched to the ExtraFeatures based on the CODE attribute. Where an ExtraFeature corresponds to
-a new feature (i.e. a new reef), then the CODE attribute is NULL as there is no original feature
-to match to.
-
-Processing steps:
-----------------
-1. Copy attributes from TS-GBR-Features to ExtraFeatures based on matching CODE
-2. Find spatial matches between Override points and TS-GBR-Features
-   - Apply 'Bank' and 'Rock' overrides (change feature type)
-3. Remove features that have 'Merge', 'Move', 'Remove', or 'Reshape' overrides
-4. Merge the ExtraFeatures with the updated TS-GBR-Features
-   - Set Dataset='Aus-Trop-Reef-Features_v0-1' for all ExtraFeatures
-5. Rename attributes and apply classification mapping
-
-Override actions:
-----------------
-- Bank/Rock: Updates FEAT_NAME of existing feature to specified value
-- Remove: Removes feature with no replacement
-- Move/Reshape: Removes feature, replaced by ExtraFeature with same CODE
-- Merge: Removes multiple features, replaced by one ExtraFeature
-
-Notes:
------
-- Duplicate CODEs in TS-GBR-Features are allowed (multi-part features)
-- Multiple overrides with the same action on the same CODE are allowed
-- Different override actions on the same CODE will cause an error
-- A limitation of this approach is that the reef allocation does not
- consider depth in the RB_Type_L3 classification.
+Inputs:
+  - GBR-TS features (third-party)
+  - Reef Edit polygons with full RB_Type_L3 attributes
+  - Remove-Move points
+  - RB_Type_L3 crosswalk CSV (for retained old features)
 
 Output: working/02/TS-GBR-Features-patched.shp
 
@@ -68,443 +30,555 @@ Part of: NESP Marine and Coastal Hub Project 3.17
 
 import geopandas as gpd
 import pandas as pd
+import numpy as np
 import os
 import sys
 import configparser
-from shapely.geometry import Point
 from shapely.ops import unary_union
 
-# Define version
-VERSION = "v0-1"
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+IOU_THRESHOLD = 0.1  # Minimum IoU for inheriting CODE/ReefID from old feature
 
-# Read configuration from config.ini
+# ---------------------------------------------------------------------------
+# Configuration
+# ---------------------------------------------------------------------------
 config = configparser.ConfigParser()
 config.read('config.ini')
-download_path = config.get('general', 'in_3p_path')
+in_3p_path = config.get('general', 'in_3p_path')
+in_path = config.get('general', 'in_path')
+VERSION = config.get('general', 'version')
 
-# Define paths
-base_path = f"data/{VERSION}"
-ts_gbr_path = os.path.join(download_path, "TS-GBR-Feat", "TS_AIMS_NESP_Torres_Strait_Features_V1b_with_GBR_Features.shp")
-override_path = os.path.join(base_path, "in", "Complete-GBR-FeatType-Override.shp")
-extra_features_path = os.path.join(base_path, "in", "Complete-GBR-ExtraFeatures.shp")
-# rb_type_lut_path = os.path.join(base_path, "in", "RB_Type_L3_Classification.csv")
-rb_type_lut_path = os.path.join(download_path, "NW-Aus-Feat_v0-4", "in", "RB_Type_L3_crosswalk.csv")
+# Input paths
+gbr_path = os.path.join(in_3p_path, "TS-GBR-Feat",
+                        "TS_AIMS_NESP_Torres_Strait_Features_V1b_with_GBR_Features.shp")
+reef_edit_path = os.path.join(in_path, "Reef-edit",
+                              f"AIMS_GBR-TS-Features_Edit_{VERSION}.shp")
+remove_move_path = os.path.join(in_path, "Reef-remove-move",
+                                f"AIMS_GBR-TS-Features_remove-move_{VERSION}.shp")
+crosswalk_path = os.path.join(in_3p_path, "NW-Aus-Feat_v1-0", "in",
+                              "RB_Type_L3_crosswalk.csv")
+
+# Output
 output_dir = "working/02"
 output_path = os.path.join(output_dir, "TS-GBR-Features-patched.shp")
 
-def load_classification_lookup(csv_path):
-    """
-    Load the classification lookup table from CSV and create a mapping dictionary
-    from all aliases (GBR_Features_FEAT_NAME and TS_Features_LEVEL_3) to their corresponding RB_Type_L3_v0-4 values.
-    Output attribute remains 'RB_Type_L3'.
-    """
-    print(f"Loading classification lookup table from {csv_path}")
-    try:
-        df = pd.read_csv(csv_path)
-        mapping = {}
 
-        # For each row, combine aliases from GBR_Features_FEAT_NAME and TS_Features_LEVEL_3
-        for _, row in df.iterrows():
-            rb_type = row['RB_Type_L3_v0-4']
-            # GBR_Features_FEAT_NAME (may be semicolon separated)
-            if pd.notna(row.get('GBR_Features_FEAT_NAME')):
-                for alias in str(row['GBR_Features_FEAT_NAME']).split(';'):
+# ---------------------------------------------------------------------------
+# Helper functions
+# ---------------------------------------------------------------------------
+
+def load_classification_lookup(csv_path):
+    """Build a mapping from FEAT_NAME / LEVEL_3 aliases to RB_Type_L3."""
+    print(f"  Loading crosswalk from {csv_path}")
+    df = pd.read_csv(csv_path)
+    mapping = {}
+    for _, row in df.iterrows():
+        rb_type = row['RB_Type_L3_v0-4']
+        for col in ('GBR_Features_FEAT_NAME', 'TS_Features_LEVEL_3'):
+            if pd.notna(row.get(col)):
+                for alias in str(row[col]).split(';'):
                     alias = alias.strip()
                     if alias:
                         mapping[alias.lower()] = rb_type
-            # TS_Features_LEVEL_3 (may be semicolon separated)
-            if pd.notna(row.get('TS_Features_LEVEL_3')):
-                for ts_alias in str(row['TS_Features_LEVEL_3']).split(';'):
-                    ts_alias = ts_alias.strip()
-                    if ts_alias:
-                        mapping[ts_alias.lower()] = rb_type
-            # Also map RB_Type_L3_v0-4 itself for direct matching
-            if pd.notna(rb_type):
-                mapping[str(rb_type).lower()] = rb_type
+        if pd.notna(rb_type):
+            mapping[str(rb_type).lower()] = rb_type
+    print(f"  Loaded {len(mapping)} classification aliases")
+    return mapping
 
-        print(f"Loaded {len(mapping)} classification aliases (including direct RB_Type_L3 matches)")
-        return mapping
-    except Exception as e:
-        print(f"Error loading classification lookup table: {e}")
-        sys.exit(1)
 
-def map_feature_classification(classification_mapping, feat_name, level_3=None):
-    """
-    Map feature classifications using the lookup table.
-    First tries LEVEL_3 if available, then falls back to FEAT_NAME.
-    Handles both direct RB_Type_L3 matches and alias matches.
-    """
-    # Determine the best classification to use
-    classification = None
-    source = None
-    
-    if pd.notna(level_3) and level_3.strip():
-        classification = level_3.strip()
-        source = "LEVEL_3"
-    elif pd.notna(feat_name) and feat_name.strip():
-        classification = feat_name.strip()
-        source = "FEAT_NAME"
+def map_classification(classification_mapping, feat_name, level_3=None):
+    """Return (rb_type, source_field) using LEVEL_3 preferentially."""
+    for value, source in [(level_3, 'LEVEL_3'), (feat_name, 'FEAT_NAME')]:
+        if pd.notna(value) and str(value).strip():
+            rb_type = classification_mapping.get(str(value).strip().lower())
+            if rb_type is not None:
+                return rb_type, source
+    return None, None
+
+
+def compute_edge_acc(area_km2):
+    """Area-based EdgeAcc_m assignment."""
+    if area_km2 > 30:
+        return 800
+    elif area_km2 > 10:
+        return 600
+    elif area_km2 > 1:
+        return 300
+    elif area_km2 > 0.1:
+        return 200
     else:
-        return None, "No valid classification found"
-    
-    # Look up the classification in the mapping
-    rb_type = classification_mapping.get(classification.lower())
-    
-    if rb_type is None:
-        return None, f"No mapping found for '{classification}' from {source}"
-    
-    return rb_type, source
+        return 150
+
+
+def make_provisional_id(centroid, used_ids):
+    """Generate a PROV-{lat}-{lon} identifier, appending a letter on collision."""
+    lat = int(round(abs(centroid.y) * 100))
+    lon = int(round(abs(centroid.x) * 100))
+    base = f"PROV-{lat}-{lon}"
+    candidate = base
+    suffix = 0
+    while candidate in used_ids:
+        candidate = f"{base}{chr(ord('a') + suffix)}"
+        suffix += 1
+    used_ids.add(candidate)
+    return candidate
+
+
+def compute_iou(geom_a, geom_b):
+    """Intersection-over-union of two geometries."""
+    if geom_a is None or geom_b is None:
+        return 0.0
+    intersection = geom_a.intersection(geom_b).area
+    if intersection == 0:
+        return 0.0
+    union = geom_a.union(geom_b).area
+    if union == 0:
+        return 0.0
+    return intersection / union
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 
 def main():
-    print(f"Starting patching process for {VERSION}")
-    print(f"Using TS-GBR features from: {ts_gbr_path}")
-    
-    # Create output directory if it doesn't exist
     os.makedirs(output_dir, exist_ok=True)
-    
-    # Load the datasets
-    print("Loading datasets...")
-    try:
-        ts_gbr_features = gpd.read_file(ts_gbr_path)
-        override_points = gpd.read_file(override_path)
-        extra_features = gpd.read_file(extra_features_path)
-        classification_mapping = load_classification_lookup(rb_type_lut_path)
-        # Ensure CRS is set (GDA94 EPSG:4283 if missing). GeoPandas
-        # seems to not reliably set CRS automatically.
-        if ts_gbr_features.crs is None:
-            print("  Setting CRS to EPSG:4283 (GDA94) for input features...")
-            ts_gbr_features.set_crs(epsg=4283, inplace=True)
-        if extra_features.crs is None:
-            extra_features.set_crs(epsg=4283, inplace=True)
-        if override_points.crs is None:
-            override_points.set_crs(epsg=4283, inplace=True)
-    except Exception as e:
-        print(f"Error loading datasets: {e}")
-        sys.exit(1)
-    
-    print(f"Loaded {len(ts_gbr_features)} TS-GBR features")
-    print(f"Loaded {len(override_points)} override points")
-    print(f"Loaded {len(extra_features)} extra features")
-    
-    # --- Save a copy of island/mainland features for later attachment calculation ---
-    print("\nSaving island/mainland features for later attachment calculation...")
-    island_mainland_mask = ts_gbr_features['LEVEL_1'].isin(['Island', 'Mainland'])
-    islands_mainland = ts_gbr_features[island_mainland_mask].copy()
-    
-    # Remove features with LEVEL_1='Island', 'Mainland', 'Other' early in the process
-    print("\nRemoving features with LEVEL_1='Island', 'Mainland', or 'Other'...")
-    original_count = len(ts_gbr_features)
-    ts_gbr_features = ts_gbr_features[~ts_gbr_features['LEVEL_1'].isin(['Island', 'Mainland', 'Other'])]
-    removed_count = original_count - len(ts_gbr_features)
-    print(f"  Removed {removed_count} features with LEVEL_1='Island', 'Mainland', or 'Other'")
-    
-    # Check for duplicate CODEs in TS-GBR-Features - but only warn, don't exit
-    print("\nChecking for duplicate CODEs in TS-GBR-Features...")
-    code_counts = ts_gbr_features['CODE'].value_counts()
-    duplicate_codes = code_counts[code_counts > 1]
-    if not duplicate_codes.empty:
-        print(f"WARNING: Found duplicate CODEs in TS-GBR-Features: {duplicate_codes.index.tolist()}")
-        print(f"These are likely multi-part features that have been split. Using first instance for each.")
-    
-    # Step 1: Copy attributes from TS-GBR-Features to ExtraFeatures based on CODE
-    print("\nStep 1: Copying attributes from TS-GBR-Features to ExtraFeatures...")
-    # Create a dictionary of CODE to attributes from ts_gbr_features
-    # For duplicates, this will use the first occurrence of each CODE
-    ts_gbr_dict = {}
-    for _, row in ts_gbr_features.iterrows():
-        if pd.notna(row['CODE']) and row['CODE'] not in ts_gbr_dict:
-            ts_gbr_dict[row['CODE']] = row
-    
-    # Create a copy of extra_features to hold the updated data
-    extra_features_with_attrs = extra_features.copy()
-    
-    # List to store extra features with no matching CODE
-    no_match_codes = []
-    
-    # Copy attributes from ts_gbr_features to extra_features_with_attrs
-    for idx, row in extra_features_with_attrs.iterrows():
-        code = row['CODE']
-        if pd.notna(code) and code in ts_gbr_dict:
-            print(f"  Copying attributes for ExtraFeature with CODE {code}")
-            # Copy all attributes except geometry and FEAT_NAME
-            for col in ts_gbr_features.columns:
-                if col not in ['geometry', 'FEAT_NAME']:
-                    extra_features_with_attrs.at[idx, col] = ts_gbr_dict[code][col]
-        elif pd.notna(code):  # Only report if CODE is not empty/null
-            no_match_codes.append(code)
-            print(f"  No matching CODE {code} found in TS-GBR-Features")
-    
-    if no_match_codes:
-        print(f"WARNING: {len(no_match_codes)} ExtraFeature records with no matching CODE in TS-GBR-Features")
-    
-    # Step 2: Determine spatial matches between Override points and TS-GBR-Features
-    print("\nStep 2: Finding spatial matches between Override points and TS-GBR-Features...")
-    # Dictionary to track which features are affected by overrides
-    affected_features = {}
-    
-    # Create a spatial index for ts_gbr_features to speed up spatial queries
-    ts_gbr_sindex = ts_gbr_features.sindex
-    
-    # Identify features that intersect with override points
-    for idx, override_point in override_points.iterrows():
-        point_geom = override_point.geometry
-        
-        # Use spatial index to find potential matches
-        possible_matches_idx = list(ts_gbr_sindex.intersection(point_geom.bounds))
-        possible_matches = ts_gbr_features.iloc[possible_matches_idx]
-        
-        # Refine to exact matches
-        matches = possible_matches[possible_matches.contains(point_geom)]
-        
+
+    # ------------------------------------------------------------------
+    # Step 1: Load and prepare inputs
+    # ------------------------------------------------------------------
+    print("Step 1: Loading and preparing inputs")
+
+    print(f"  Reading GBR features from {gbr_path}")
+    gbr = gpd.read_file(gbr_path)
+    if gbr.crs is None:
+        gbr = gbr.set_crs(epsg=4283)
+    print(f"  {len(gbr)} GBR features loaded")
+
+    print(f"  Reading Reef Edit from {reef_edit_path}")
+    reef_edit = gpd.read_file(reef_edit_path)
+    reef_edit = reef_edit.to_crs(epsg=4283)
+    print(f"  {len(reef_edit)} Reef Edit features loaded")
+
+    print(f"  Reading Remove-Move from {remove_move_path}")
+    remove_move = gpd.read_file(remove_move_path)
+    if remove_move.crs is None:
+        remove_move = remove_move.set_crs(epsg=4283)
+    print(f"  {len(remove_move)} Remove-Move points loaded")
+
+    classification_mapping = load_classification_lookup(crosswalk_path)
+
+    # Validate no null geometries
+    for name, gdf in [('GBR', gbr), ('Reef Edit', reef_edit),
+                       ('Remove-Move', remove_move)]:
+        null_count = gdf.geometry.isna().sum()
+        if null_count > 0:
+            print(f"ERROR: {null_count} null geometries in {name}")
+            sys.exit(1)
+
+    # Normalise CODE columns: treat empty strings as null
+    for gdf in [gbr, reef_edit]:
+        gdf.loc[gdf['CODE'].astype(str).str.strip() == '', 'CODE'] = None
+
+    # ------------------------------------------------------------------
+    # Step 2: Process move operations (against unfiltered GBR)
+    # ------------------------------------------------------------------
+    print("\nStep 2: Processing move operations")
+
+    # Identify Reef Edit features with CODE set (move operations)
+    move_mask = reef_edit['CODE'].notna()
+    move_edits = reef_edit[move_mask].copy()
+    overlap_edits = reef_edit[~move_mask].copy()
+    print(f"  {len(move_edits)} Reef Edit features with CODE (moves)")
+    print(f"  {len(overlap_edits)} Reef Edit features without CODE (overlaps/new)")
+
+    # Build CODE lookup on the full (unfiltered) GBR — move/remove points
+    # can target island/cay features that would otherwise be filtered out.
+    gbr_code_to_idx = {}
+    for idx, row in gbr.iterrows():
+        if pd.notna(row['CODE']):
+            gbr_code_to_idx.setdefault(row['CODE'], []).append(idx)
+
+    # Validate move points match Reef Edit CODEs
+    move_points = remove_move[remove_move['ACTION'] == 'Move'].copy()
+    print(f"  {len(move_points)} Move points in Remove-Move file")
+
+    # Spatially join Move points to unfiltered GBR to find which CODEs they hit
+    move_point_codes = set()
+    unmatched_move_points = []
+    gbr_sindex = gbr.sindex
+    for pt_idx, pt_row in move_points.iterrows():
+        pt_geom = pt_row.geometry
+        candidates = list(gbr_sindex.intersection(pt_geom.bounds))
+        matches = gbr.iloc[candidates]
+        matches = matches[matches.contains(pt_geom)]
         if len(matches) == 0:
-            print(f"WARNING: Override point {idx} (type: {override_point['FEAT_NAME']}) does not intersect any feature")
+            print(f"  WARNING: Move point {pt_idx} does not intersect any GBR feature")
+            unmatched_move_points.append(pt_idx)
+        else:
+            for _, m in matches.iterrows():
+                move_point_codes.add(m['CODE'])
+
+    if unmatched_move_points:
+        debug_path = os.path.join(output_dir, "debug-unmatched-move-points.shp")
+        move_points.loc[unmatched_move_points].to_file(debug_path)
+        print(f"ERROR: {len(unmatched_move_points)} Move points do not intersect "
+              f"any GBR feature. Saved to {debug_path}")
+        sys.exit(1)
+
+    reef_edit_codes = set(move_edits['CODE'].dropna().unique())
+
+    # Validate one-to-one correspondence
+    only_in_points = move_point_codes - reef_edit_codes
+    only_in_edits = reef_edit_codes - move_point_codes
+    if only_in_points:
+        print(f"ERROR: Move point CODEs not found in Reef Edit: {only_in_points}")
+        sys.exit(1)
+    if only_in_edits:
+        # CODEs in Reef Edit but not in Move points are disambiguation codes,
+        # not errors. The design says the check is that every Move point has a
+        # corresponding Reef Edit CODE. Extra Reef Edit CODEs (disambiguation)
+        # are allowed.
+        print(f"  Note: {len(only_in_edits)} Reef Edit CODEs have no corresponding "
+              f"Move point (disambiguation CODEs)")
+
+    # Record LABEL_IDs and mark GBR features for deletion
+    move_label_ids = {}   # Reef Edit index -> LABEL_ID
+    move_codes_map = {}   # Reef Edit index -> CODE
+    gbr_delete_move = set()
+    for edit_idx, edit_row in move_edits.iterrows():
+        code = edit_row['CODE']
+        if code in gbr_code_to_idx:
+            gbr_indices = gbr_code_to_idx[code]
+            label_id = gbr.at[gbr_indices[0], 'LABEL_ID']
+            move_label_ids[edit_idx] = label_id
+            move_codes_map[edit_idx] = code
+            gbr_delete_move.update(gbr_indices)
+        else:
+            print(f"WARNING: CODE {code} from Reef Edit not found in GBR features")
+
+    print(f"  Marking {len(gbr_delete_move)} GBR features for deletion (move)")
+
+    # ------------------------------------------------------------------
+    # Step 3: Process removals (against unfiltered GBR)
+    # ------------------------------------------------------------------
+    print("\nStep 3: Processing removals")
+    remove_points = remove_move[remove_move['ACTION'] == 'Remove'].copy()
+    print(f"  {len(remove_points)} Remove points")
+
+    gbr_delete_remove = set()
+    unmatched_remove_points = []
+    for pt_idx, pt_row in remove_points.iterrows():
+        pt_geom = pt_row.geometry
+        candidates = list(gbr_sindex.intersection(pt_geom.bounds))
+        matches = gbr.iloc[candidates]
+        matches = matches[matches.contains(pt_geom)]
+        if len(matches) == 0:
+            print(f"  WARNING: Remove point {pt_idx} does not intersect any GBR feature")
+            unmatched_remove_points.append(pt_idx)
+        else:
+            gbr_delete_remove.update(matches.index.tolist())
+
+    if unmatched_remove_points:
+        debug_path = os.path.join(output_dir, "debug-unmatched-remove-points.shp")
+        remove_points.loc[unmatched_remove_points].to_file(debug_path)
+        print(f"ERROR: {len(unmatched_remove_points)} Remove points do not intersect "
+              f"any GBR feature. Saved to {debug_path}")
+        sys.exit(1)
+
+    print(f"  Marking {len(gbr_delete_remove)} GBR features for deletion (removal)")
+
+    # ------------------------------------------------------------------
+    # Apply move/remove deletions and Island/Mainland/Other filter together
+    # ------------------------------------------------------------------
+    print("\n  Applying deletions and filtering Island/Mainland/Other")
+    all_delete = gbr_delete_move | gbr_delete_remove
+
+    # Save island/mainland for attachment calculation before filtering
+    islands_mainland = gbr[gbr['LEVEL_1'].isin(['Island', 'Mainland'])].copy()
+
+    # Remove: move/remove targets + Island/Mainland/Other
+    filter_mask = gbr['LEVEL_1'].isin(['Island', 'Mainland', 'Other'])
+    drop_indices = set(gbr.index[filter_mask]) | all_delete
+    original_count = len(gbr)
+    gbr = gbr.drop(index=drop_indices).reset_index(drop=True)
+    print(f"  Removed {original_count - len(gbr)} features "
+          f"({len(all_delete)} move/remove, rest Island/Mainland/Other), "
+          f"{len(gbr)} remaining")
+
+    # Rebuild spatial index after deletions
+    gbr_sindex = gbr.sindex
+
+    # ------------------------------------------------------------------
+    # Step 4: Process overlap replacements
+    # ------------------------------------------------------------------
+    print("\nStep 4: Processing overlap replacements")
+
+    # For IoU computation we need an equal-area projection
+    gbr_3577 = gbr.to_crs(epsg=3577)
+    overlap_edits_3577 = overlap_edits.to_crs(epsg=3577)
+
+    # Track per-edit: which GBR features overlap, their CODEs/LABEL_IDs
+    overlap_info = {}       # edit_idx -> {'codes': [...], 'label_ids': [...]}
+    gbr_delete_overlap = set()
+
+    for edit_idx, edit_row in overlap_edits_3577.iterrows():
+        edit_geom = edit_row.geometry
+        # Use the 4283 geometry for spatial index query (index is on gbr, not gbr_3577)
+        edit_geom_4283 = overlap_edits.loc[edit_idx, 'geometry']
+        candidates = list(gbr_sindex.intersection(edit_geom_4283.bounds))
+        if not candidates:
+            overlap_info[edit_idx] = {'codes': [], 'label_ids': []}
             continue
-        
-        if len(matches) > 1:
-            print(f"WARNING: Override point {idx} intersects multiple features. Using the first match.")
-        
-        # Get the first (or only) match
-        match_idx = matches.index[0]
-        match_code = matches.at[match_idx, 'CODE']
-        
-        # Check if this feature has already been affected by an override
-        if match_code in affected_features:
-            # Allow multiple overrides with the same action on the same CODE
-            # (This happens when a feature is split into multiple parts with the same CODE)
-            if affected_features[match_code] == override_point['FEAT_NAME']:
-                print(f"Note: Multiple {override_point['FEAT_NAME']} overrides affecting feature with CODE {match_code}")
+
+        codes = []
+        label_ids = []
+        for gbr_local_idx in candidates:
+            gbr_geom_3577 = gbr_3577.iloc[gbr_local_idx].geometry
+            # Check any intersection first
+            if not edit_geom.intersects(gbr_geom_3577):
+                continue
+            # Any intersection -> mark for deletion
+            gbr_real_idx = gbr.index[gbr_local_idx]
+            gbr_delete_overlap.add(gbr_real_idx)
+            # Check IoU for CODE/LABEL_ID inheritance
+            iou = compute_iou(edit_geom, gbr_geom_3577)
+            if iou >= IOU_THRESHOLD:
+                code = gbr.at[gbr_real_idx, 'CODE']
+                label_id = gbr.at[gbr_real_idx, 'LABEL_ID']
+                if pd.notna(code):
+                    codes.append(code)
+                if pd.notna(label_id):
+                    label_ids.append(label_id)
+        overlap_info[edit_idx] = {'codes': codes, 'label_ids': label_ids}
+
+    print(f"  {len(gbr_delete_overlap)} GBR features to delete (overlapped by new features)")
+    overlap_with_codes = sum(1 for v in overlap_info.values() if v['codes'])
+    overlap_new = sum(1 for v in overlap_info.values() if not v['codes'])
+    print(f"  {overlap_with_codes} new features inherit CODEs, "
+          f"{overlap_new} are genuinely new or have no significant overlap")
+
+    gbr = gbr.drop(index=gbr_delete_overlap).reset_index(drop=True)
+
+    # ------------------------------------------------------------------
+    # Step 5: Assign ReefID and CODES for new features
+    # ------------------------------------------------------------------
+    print("\nStep 5: Assigning ReefID and CODES for new features")
+
+    used_prov_ids = set()
+    reef_edit_reefid = {}
+    reef_edit_codes_attr = {}
+    reef_edit_idaliases = {}
+
+    # 5a. Move features
+    for edit_idx in move_edits.index:
+        label_id = move_label_ids.get(edit_idx)
+        code = move_codes_map.get(edit_idx)
+        reef_edit_reefid[edit_idx] = label_id
+        reef_edit_codes_attr[edit_idx] = code
+        reef_edit_idaliases[edit_idx] = None
+
+    # 5b. Overlap features — first pass: determine which LABEL_IDs map 1:1
+    # Count how many new features claim each LABEL_ID
+    label_id_claimants = {}  # label_id -> list of edit_idx
+    for edit_idx in overlap_edits.index:
+        info = overlap_info.get(edit_idx, {'codes': [], 'label_ids': []})
+        unique_labels = list(dict.fromkeys(info['label_ids']))  # deduplicate, preserve order
+        if len(unique_labels) == 1:
+            lid = unique_labels[0]
+            label_id_claimants.setdefault(lid, []).append(edit_idx)
+
+    for edit_idx in overlap_edits.index:
+        info = overlap_info.get(edit_idx, {'codes': [], 'label_ids': []})
+        codes = info['codes']
+        label_ids = info['label_ids']
+        unique_labels = list(dict.fromkeys(label_ids))
+
+        # CODES attribute
+        if codes:
+            reef_edit_codes_attr[edit_idx] = ';'.join(dict.fromkeys(codes))
+        else:
+            reef_edit_codes_attr[edit_idx] = None
+
+        # ReefID and IDAliases
+        if len(unique_labels) == 1:
+            lid = unique_labels[0]
+            if len(label_id_claimants.get(lid, [])) == 1:
+                # Exactly one new feature claims this LABEL_ID -> use it
+                reef_edit_reefid[edit_idx] = lid
+                reef_edit_idaliases[edit_idx] = None
             else:
-                # Still an error if different actions are trying to affect the same CODE
-                print(f"ERROR: Feature with CODE {match_code} is affected by conflicting overrides: "
-                      f"{affected_features[match_code]} and {override_point['FEAT_NAME']}")
-                sys.exit(1)
-        
-        # Record this override
-        affected_features[match_code] = override_point['FEAT_NAME']
-        
-        # For 'Bank' and 'Rock' overrides, update the FEAT_NAME
-        if override_point['FEAT_NAME'] in ['Bank', 'Rock']:
-            print(f"  Updating FEAT_NAME to {override_point['FEAT_NAME']} for feature with CODE {match_code}")
-            ts_gbr_features.loc[match_idx, 'FEAT_NAME'] = override_point['FEAT_NAME']
-    
-    # Step 3: Remove features that match with 'Merge', 'Move', 'Remove', 'Reshape' overrides
-    print("\nStep 3: Removing features as specified by the overrides...")
-    removal_codes = [code for code, action in affected_features.items() 
-                    if action in ['Merge', 'Move', 'Remove', 'Reshape']]
-    
-    if removal_codes:
-        print(f"  Removing {len(removal_codes)} features with actions: Merge, Move, Remove, Reshape")
-        for code in removal_codes:
-            print(f"  - Removing feature with CODE {code} (action: {affected_features[code]})")
-        
-        # Create a copy before filtering to report correct counts
-        original_count = len(ts_gbr_features)
-        ts_gbr_features = ts_gbr_features[~ts_gbr_features['CODE'].isin(removal_codes)]
-        print(f"  Removed {original_count - len(ts_gbr_features)} features")
-    else:
-        print("  No features to remove")
-    
-    # Step 4: Merge the ExtraFeatures-with-attributes dataset with the updated TS-GBR-Features
-    print("\nStep 4: Merging ExtraFeatures with updated TS-GBR-Features...")
-    valid_extra_features = extra_features_with_attrs[pd.notna(extra_features_with_attrs['FEAT_NAME'])].copy()
-    print(f"  Adding {len(valid_extra_features)} features from ExtraFeatures")
-    # Ensure both dataframes use 'Dataset' and not 'DATASET'
-    if 'DATASET' in valid_extra_features.columns:
-        valid_extra_features = valid_extra_features.rename(columns={'DATASET': 'Dataset'})
-    if 'DATASET' in ts_gbr_features.columns:
-        ts_gbr_features = ts_gbr_features.rename(columns={'DATASET': 'Dataset'})
-    # Set Dataset for added features
-    valid_extra_features['Dataset'] = 'Aus-Trop-Reef-Features_v0-1'
-    merged_features = gpd.GeoDataFrame(pd.concat([ts_gbr_features, valid_extra_features], ignore_index=True))
+                # Multiple new features claim the same LABEL_ID
+                centroid = overlap_edits.at[edit_idx, 'geometry'].centroid
+                reef_edit_reefid[edit_idx] = make_provisional_id(centroid, used_prov_ids)
+                reef_edit_idaliases[edit_idx] = lid
+        elif len(unique_labels) > 1:
+            # Multiple old LABEL_IDs merged
+            centroid = overlap_edits.at[edit_idx, 'geometry'].centroid
+            reef_edit_reefid[edit_idx] = make_provisional_id(centroid, used_prov_ids)
+            reef_edit_idaliases[edit_idx] = ';'.join(unique_labels)
+        else:
+            # Genuinely new (no overlap above threshold)
+            centroid = overlap_edits.at[edit_idx, 'geometry'].centroid
+            reef_edit_reefid[edit_idx] = make_provisional_id(centroid, used_prov_ids)
+            reef_edit_idaliases[edit_idx] = None
 
-    # Add FeatConf and TypeConf: 'High' if override or extra feature, else None
-    print("\nAssigning 'FeatConf' and 'TypeConf' attributes based on override or extra feature status...")
-    # Get set of override CODEs
-    override_codes = set(affected_features.keys())
-    # Indices of extra features (those after the original ts_gbr_features)
-    extra_feature_indices = set(merged_features.index[merged_features.index >= len(ts_gbr_features)])
-    # Indices of features with override (by CODE)
-    override_indices = set(idx for idx, row in merged_features.iterrows() if pd.notna(row.get('CODE')) and row.get('CODE') in override_codes)
-    # Union of all indices to set as 'High'
-    high_conf_indices = override_indices | extra_feature_indices
+    prov_count = sum(1 for v in reef_edit_reefid.values()
+                     if v is not None and str(v).startswith('PROV-'))
+    print(f"  {prov_count} provisional IDs assigned")
+    print(f"  {len(reef_edit_reefid) - prov_count} LABEL_IDs carried forward")
 
-    # Set FeatConf and TypeConf
-    merged_features['FeatConf'] = None
-    merged_features['TypeConf'] = merged_features.get('TypeConf', None)
-    for idx in high_conf_indices:
-        merged_features.at[idx, 'FeatConf'] = 'High'
-        merged_features.at[idx, 'TypeConf'] = 'High'
+    # ------------------------------------------------------------------
+    # Step 6: Prepare retained old features
+    # ------------------------------------------------------------------
+    print("\nStep 6: Preparing retained old features")
+    print(f"  {len(gbr)} GBR features retained")
 
-    # --- Attachment assignment step (after merging) ---
-    print("\nAssigning 'Attachment' attribute (Fringing/Isolated) to merged features...")
-    # Project to EPSG:3577 for buffering
-    orig_crs = merged_features.crs
-    if orig_crs is None or orig_crs.to_string() != "EPSG:3577":
-        print("  Reprojecting merged features and islands/mainland to EPSG:3577 for buffering...")
-        merged_features_3577 = merged_features.to_crs(epsg=3577)
-        islands_mainland_3577 = islands_mainland.to_crs(epsg=3577)
-    else:
-        merged_features_3577 = merged_features
-        islands_mainland_3577 = islands_mainland
+    # 6.1 Crosswalk
+    print("  Applying classification crosswalk")
+    unmapped = []
+    rbtype_values = []
+    origtype_values = []
+    for idx, row in gbr.iterrows():
+        rb_type, source = map_classification(
+            classification_mapping, row.get('FEAT_NAME'), row.get('LEVEL_3'))
+        if rb_type is None:
+            unmapped.append((idx, row.get('FEAT_NAME'), row.get('LEVEL_3')))
+        rbtype_values.append(rb_type)
+        # OrigType
+        level_3 = row.get('LEVEL_3')
+        feat_name = row.get('FEAT_NAME')
+        if pd.notna(level_3) and str(level_3).strip():
+            origtype_values.append(str(level_3).strip())
+        elif pd.notna(feat_name) and str(feat_name).strip():
+            origtype_values.append(str(feat_name).strip())
+        else:
+            origtype_values.append(None)
 
-    # Buffer islands/mainland by 200m
-    print("  Buffering island/mainland features by 200m...")
-    from shapely.ops import unary_union
+    if unmapped:
+        print(f"ERROR: {len(unmapped)} features could not be mapped to RB_Type_L3:")
+        for idx, fn, l3 in unmapped[:10]:
+            print(f"  Index {idx}: FEAT_NAME={fn}, LEVEL_3={l3}")
+        sys.exit(1)
+
+    gbr['RB_Type_L3'] = rbtype_values
+    gbr['OrigType'] = origtype_values
+
+    # 6.2 Attachment
+    print("  Computing Attachment (island/mainland buffer)")
+    gbr_3577 = gbr.to_crs(epsg=3577)
+    islands_mainland_3577 = islands_mainland.to_crs(epsg=3577)
     buffer_union = unary_union(islands_mainland_3577.buffer(200))
 
-    # Assign Attachment
-    print("  Assigning 'Attachment' values...")
-    def attachment_func(geom, idx):
-        if geom is None:
-            print(f"ERROR: Feature at index {idx} has geometry=None.")
-            print("Use QGIS Attribute Table > Select by Expression > is_empty($geometry) OR $geometry IS NULL")
-            raise ValueError(f"Feature at index {idx} has geometry=None")
-        return 'Fringing' if geom.intersects(buffer_union) else 'Isolated'
-    # Use enumerate to provide index for debugging
-    merged_features_3577['Attachment'] = [
-        attachment_func(geom, idx) for idx, geom in enumerate(merged_features_3577.geometry)
+    attachment_values = []
+    for geom in gbr_3577.geometry:
+        if geom.intersects(buffer_union):
+            attachment_values.append('Fringing')
+        else:
+            attachment_values.append('Isolated')
+    gbr['Attachment'] = attachment_values
+
+    # Override for Unvegetated Cay
+    cay_mask = gbr['RB_Type_L3'] == 'Unvegetated Cay'
+    gbr.loc[cay_mask, 'Attachment'] = 'Land'
+
+    # 6.3 EdgeAcc_m
+    print("  Computing EdgeAcc_m from area")
+    areas_km2 = gbr_3577.geometry.area / 1e6
+    gbr['EdgeAcc_m'] = [compute_edge_acc(a) for a in areas_km2]
+
+    # 6.4 Other defaults
+    gbr['FeatConf'] = None
+    gbr['TypeConf'] = gbr.get('CLASS_CONF', pd.Series(dtype='object'))
+    gbr['DepthCat'] = None
+    gbr['DepthCatSr'] = None
+
+    # 6.5 Rename
+    rename_map = {'IMG_SRC': 'EdgeSrc', 'LABEL_ID': 'ReefID'}
+    gbr = gbr.rename(columns={k: v for k, v in rename_map.items() if k in gbr.columns})
+
+    # 6.6 Dataset — retain original
+    if 'DATASET' in gbr.columns:
+        gbr = gbr.rename(columns={'DATASET': 'Dataset'})
+
+    # 6.7 CODES and IDAliases
+    gbr['CODES'] = gbr['CODE'] if 'CODE' in gbr.columns else None
+    gbr['IDAliases'] = None
+
+    # ------------------------------------------------------------------
+    # Step 7: Prepare new features (Reef Edit)
+    # ------------------------------------------------------------------
+    print("\nStep 7: Preparing Reef Edit features")
+
+    # Recombine move_edits and overlap_edits
+    new_features = pd.concat([move_edits, overlap_edits], ignore_index=False)
+    new_features = new_features.copy()
+
+    # Assign computed attributes
+    new_features['ReefID'] = new_features.index.map(reef_edit_reefid)
+    new_features['CODES'] = new_features.index.map(reef_edit_codes_attr)
+    new_features['IDAliases'] = new_features.index.map(reef_edit_idaliases)
+    new_features['OrigType'] = new_features['RB_Type_L3']
+    new_features['Dataset'] = f'Aus-Trop-Reef-Features_{VERSION}'
+
+    # EdgeAcc_m — fill nulls with area-based values
+    needs_edge_acc = new_features['EdgeAcc_m'].isna()
+    if needs_edge_acc.any():
+        print(f"  Filling {needs_edge_acc.sum()} null EdgeAcc_m values from area")
+        new_3577 = new_features[needs_edge_acc].to_crs(epsg=3577)
+        areas_km2 = new_3577.geometry.area / 1e6
+        for i, (orig_idx, area) in enumerate(zip(new_3577.index, areas_km2)):
+            new_features.at[orig_idx, 'EdgeAcc_m'] = compute_edge_acc(area)
+
+    # Drop Note and FEAT_NAME
+    drop_cols = [c for c in ['Note', 'FEAT_NAME'] if c in new_features.columns]
+    if drop_cols:
+        new_features = new_features.drop(columns=drop_cols)
+
+    # Drop the original CODE column (now recorded in CODES)
+    if 'CODE' in new_features.columns:
+        new_features = new_features.drop(columns=['CODE'])
+
+    print(f"  {len(new_features)} new features prepared")
+
+    # ------------------------------------------------------------------
+    # Step 8: Merge and output
+    # ------------------------------------------------------------------
+    print("\nStep 8: Merging and saving output")
+
+    # Trim old features to output schema
+    output_columns = [
+        'RB_Type_L3', 'Attachment', 'DepthCat', 'DepthCatSr',
+        'FeatConf', 'TypeConf', 'EdgeSrc', 'EdgeAcc_m',
+        'OrigType', 'Dataset', 'ReefID', 'CODES', 'IDAliases', 'geometry'
     ]
 
-    # Restore CRS if needed
-    if orig_crs is None or orig_crs.to_string() != "EPSG:3577":
-        merged_features = merged_features_3577.to_crs(orig_crs)
-    else:
-        merged_features = merged_features_3577
+    # Keep only output columns that exist (others are discarded)
+    gbr_out = gbr[[c for c in output_columns if c in gbr.columns]].copy()
+    new_out = new_features[[c for c in output_columns if c in new_features.columns]].copy()
 
-    # --- EdgeAcc_m assignment step ---
-    print("\nAssigning 'EdgeAcc_m' attribute based on feature area and source...")
+    # Align schemas
+    all_cols = list(dict.fromkeys(list(gbr_out.columns) + list(new_out.columns)))
+    for col in all_cols:
+        if col not in gbr_out.columns:
+            gbr_out[col] = None
+        if col not in new_out.columns:
+            new_out[col] = None
 
-    # Calculate area in km^2 for each feature (project to EPSG:3577 for area calculation)
-    merged_features_area = merged_features.to_crs(epsg=3577).geometry.area / 1e6  # m^2 to km^2
+    merged = gpd.GeoDataFrame(pd.concat([gbr_out, new_out], ignore_index=True))
+    merged = merged.set_crs(epsg=4283)
 
-    # Identify features added from ExtraFeatures (those after the original ts_gbr_features)
-    extra_feature_mask = merged_features.index >= len(ts_gbr_features)
-    edge_acc_values = []
+    print(f"  Saving {len(merged)} features to {output_path}")
+    merged.to_file(output_path)
 
-    for idx, area_km2 in enumerate(merged_features_area):
-        is_extra = extra_feature_mask[idx]
-        if is_extra:
-            # FeatType-Override/ExtraFeatures table
-            if area_km2 > 1:
-                edge_acc = 150
-            elif area_km2 > 0.1:
-                edge_acc = 80
-            else:
-                edge_acc = 50
-        else:
-            # All other features table
-            if area_km2 > 30:
-                edge_acc = 800
-            elif area_km2 > 10:
-                edge_acc = 600
-            elif area_km2 > 1:
-                edge_acc = 300
-            elif area_km2 > 0.1:
-                edge_acc = 200
-            else:
-                edge_acc = 150
-        edge_acc_values.append(edge_acc)
+    # Summary
+    print(f"\nDone. Output: {output_path}")
+    print(f"  Old features retained: {len(gbr_out)}")
+    print(f"  New features added: {len(new_out)}")
+    print(f"  Total: {len(merged)}")
 
-    merged_features['EdgeAcc_m'] = edge_acc_values
-
-    # Step 5: Rename attributes and apply classification mapping
-    print("\nStep 5: Renaming attributes and applying classification mapping...")
-    
-    # Rename attributes in merged features
-    print("  Renaming attributes...")
-    merged_features = merged_features.rename(columns={
-        'IMG_SRC': 'EdgeSrc',
-        'QLD_NAME': 'Name',
-        'TRAD_NAME': 'OtherNames',
-        'LABEL_ID': 'ReefID'
-    })
-    
-    # Set TypeConf from CLASS_CONF where CLASS_CONF is not null
-    if 'CLASS_CONF' in merged_features.columns:
-        merged_features.loc[merged_features['CLASS_CONF'].notnull(), 'TypeConf'] = merged_features['CLASS_CONF']
-        merged_features = merged_features.drop(columns=['CLASS_CONF'])
-    
-    # Set EdgeSrc for features from ExtraFeatures to 'S2 All Tide'
-    print("  Setting EdgeSrc for added features...")
-    # Identify rows from extra_features by checking their indices against the original dataframe
-    extra_feature_indices = merged_features.index[merged_features.index >= len(ts_gbr_features)]
-    merged_features.loc[extra_feature_indices, 'EdgeSrc'] = 'S2 All Tide'
-    
-    # Add OrigType attribute to preserve the most detailed original type
-    print("  Adding OrigType attribute...")
-    merged_features['OrigType'] = None
-    
-    for idx, row in merged_features.iterrows():
-        if pd.notna(row.get('LEVEL_3')) and row.get('LEVEL_3').strip():
-            merged_features.at[idx, 'OrigType'] = row['LEVEL_3'].strip()
-        elif pd.notna(row.get('FEAT_NAME')) and row.get('FEAT_NAME').strip():
-            merged_features.at[idx, 'OrigType'] = row['FEAT_NAME'].strip()
-    
-    # Apply classification mapping
-    print("  Applying classification mapping...")
-    # Add RB_Type_L3 column if it doesn't exist
-    if 'RB_Type_L3' not in merged_features.columns:
-        merged_features['RB_Type_L3'] = None
-    
-    # Track unmapped classifications for reporting
-    unmapped = {}
-    
-    # Apply mapping to each feature
-    for idx, row in merged_features.iterrows():
-        rb_type, source = map_feature_classification(
-            classification_mapping, 
-            row.get('FEAT_NAME'), 
-            row.get('LEVEL_3')
-        )
-        
-        if rb_type is not None:
-            merged_features.at[idx, 'RB_Type_L3'] = rb_type
-        else:
-            # Track unmapped classifications for reporting
-            if source not in unmapped:
-                unmapped[source] = set()
-            
-            if "No valid classification" in source:
-                unmapped[source].add("Empty or NULL value")
-            else:
-                classification = row.get('LEVEL_3') if "LEVEL_3" in source else row.get('FEAT_NAME')
-                unmapped[source].add(classification)
-    
-    # Report unmapped classifications
-    if unmapped:
-        print("\nWARNING: Could not map some classifications:")
-        for source, values in unmapped.items():
-            print(f"  From {source}: {', '.join(str(v) for v in values)}")
-        print("Please update the classification lookup table to include these values.")
-        # Generate error if mapping failed
-        sys.exit(1)
-    
-    # --- OVERRIDE Attachment for Unvegetated Cay ---
-    print("  Overriding 'Attachment' to 'Land' for Unvegetated Cay features...")
-    merged_features.loc[merged_features['RB_Type_L3'] == 'Unvegetated Cay', 'Attachment'] = 'Land'
-    
-    # Remove unnecessary attributes
-    print("\nRemoving unnecessary attributes...")
-    columns_to_remove = [
-        'TARGET_FID', 'LOC_NAME_S', 'GBR_NAME', 'CHART_NAME', 'TRAD_NAME', 
-        'UN_FEATURE', 'SORT_GBR_I', 'FEAT_NAME', 'LEVEL_1', 'LEVEL_2', 'LEVEL_3',
-        'CLASS_SRC', 'POLY_ORIG', 'SUB_NO', 'CODE', 'FEATURE_C', 'X_LABEL', 
-        'GBR_ID', 'LOC_NAME_L', 'X_COORD', 'Y_COORD', 'SHAPE_AREA', 'SHAPE_LEN',
-        'Checked', 'RegionID', 'LatitudeID', 'GroupID', 'UNIQUE_ID','PriorityLb','OtherNames',
-        'Name','Country'
-    ]
-    # Do not remove 'Attachment' or 'Dataset'
-    columns_to_remove = [col for col in columns_to_remove if col in merged_features.columns and col not in ['Dataset', 'Attachment']]
-    if columns_to_remove:
-        print(f"  Removing {len(columns_to_remove)} unnecessary attributes")
-        merged_features = merged_features.drop(columns=columns_to_remove)
-
-
-    # Save the result
-    print(f"\nSaving {len(merged_features)} features to {output_path}")
-    merged_features.to_file(output_path)
-    
-    print("Patching process completed successfully")
 
 if __name__ == "__main__":
     main()

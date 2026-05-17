@@ -1,0 +1,1 @@
+- When running Python commands the conda environment (AusTropReef) should be activated first. Git bash is your default CLI.

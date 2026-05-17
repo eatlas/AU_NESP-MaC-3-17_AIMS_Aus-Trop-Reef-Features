@@ -69,7 +69,8 @@ download_path = config.get('general', 'in_3p_path')
 
 # Define input and output paths
 INPUT_SHAPE = "working/04/TS-GBR-CS-NW-Features-Country.shp"
-MULTIRES_VRT = "working/05/MultiResBathyEEZ.vrt"
+#MULTIRES_VRT = f"{download_path}/MultiRes-Bathy-EEZ_2024/MultiRes-Bathy-EEZ_2024.vrt"
+MULTIRES_VRT = "working/05/MultiRes-Bathy-EEZ_2024.vrt"
 MULTIRES_TIFS = [
     os.path.join(download_path, "MultiRes-Bathy-EEZ_2024", "01_shallow_bathy.tif"),
     os.path.join(download_path, "MultiRes-Bathy-EEZ_2024", "02_mesophotic_bathy.tif"),
@@ -277,7 +278,7 @@ def main():
         p10_values, p50_values, p90_values, src_values = [], [], [], []
         total = len(reefs)
         for i, geom in enumerate(reefs.geometry):
-            if i % 100 == 0:
+            if i % 1000 == 0:
                 print(f"Processing feature {i+1}/{total}...")
             p10, p50, p90, src_name = assign_depth_percentiles(geom, rasters, feature_idx=i, geometry_crs=current_crs)
             p10_values.append(p10)

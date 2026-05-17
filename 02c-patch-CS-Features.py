@@ -25,14 +25,16 @@ def get_filepaths():
     config = configparser.ConfigParser()
     config.read(CONFIG_PATH)
     in_3p_path = config.get('general', 'in_3p_path')
+    cs_feat_version = config.get('general', 'cs_feat_version')
+    nw_aus_feat_version = config.get('general', 'nw_aus_feat_version')
     cs_reefs_features_path = os.path.join(
-        in_3p_path, 'Coral-Sea-Feat/Reefs-Cays/CS_AIMS_Coral-Sea-Features_2025_Reefs-cays.shp'
+        in_3p_path, f'CS-Feat_{cs_feat_version}/Reefs-Cays/CS_AIMS_Coral-Sea-Features_2025_Reefs-cays.shp'
     )
     cs_platforms_features_path = os.path.join(
-        in_3p_path, 'Coral-Sea-Feat/Atoll-Platforms/CS_AIMS_Coral-Sea-Features_2025_Atoll-platforms.shp'
+        in_3p_path, f'CS-Feat_{cs_feat_version}/Atoll-Platforms/CS_AIMS_Coral-Sea-Features_2025_Atoll-platforms.shp'
     )
     rb_type_lut_path = os.path.join(
-        in_3p_path, "NW-Aus-Feat_v0-4", "in", "RB_Type_L3_crosswalk.csv"
+        in_3p_path, f"NW-Aus-Feat_{nw_aus_feat_version}", "in", "RB_Type_L3_crosswalk.csv"
     )
     output_path = os.path.join(OUTPUT_DIR, OUTPUT_FILENAME)
     return cs_reefs_features_path, cs_platforms_features_path, rb_type_lut_path, output_path

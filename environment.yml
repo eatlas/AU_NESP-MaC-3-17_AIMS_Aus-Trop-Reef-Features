@@ -12,3 +12,7 @@ dependencies:
   - tqdm=4.67.1
   - geopy=2.4.1
   - gdal=3.10.3
+  - fiona=1.10.1
+  - pip
+  - pip:
+    - git+https://github.com/open-AIMS/data-downloader@v1.1.0

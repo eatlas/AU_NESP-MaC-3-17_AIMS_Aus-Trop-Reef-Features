@@ -22,6 +22,8 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 download_path = config.get('general', 'in_3p_path')
 version = config.get('general', 'version')
+nw_aus_feat_version = config.get('general', 'nw_aus_feat_version')
+cs_feat_version = config.get('general', 'cs_feat_version')
 
 # Create an instance of the DataDownloader class
 downloader = DataDownloader(download_path=download_path)
@@ -73,20 +75,20 @@ replace_prj_with_epsg_4283(gbr_shapefile)
 # Lawrey, E., Bycroft, R. (2025). Coral Sea Features - Dataset collection - Coral reefs, Cays, Oceanic 
 # reef atoll platforms, and Depth contours (AIMS). [Data set]. eAtlas. https://doi.org/10.26274/pgjp-8462
 # Reefs and Cays
-direct_download_url = 'https://nextcloud.eatlas.org.au/s/DcoZ33bMzeY5JaK/download?path=%2Fv1-2%2FReefs-Cays'
-downloader.download_and_unzip(direct_download_url, 'CS-Feat_v1-2', subfolder_name='Reefs-Cays', flatten_directory=True)
+direct_download_url = f'https://nextcloud.eatlas.org.au/s/DcoZ33bMzeY5JaK/download?path=%2F{cs_feat_version}%2FReefs-Cays'
+downloader.download_and_unzip(direct_download_url, f'CS-Feat_{cs_feat_version}', subfolder_name='Reefs-Cays', flatten_directory=True)
 
 # Atoll Platforms
-direct_download_url = 'https://nextcloud.eatlas.org.au/s/DcoZ33bMzeY5JaK/download?path=%2Fv1-2%2FAtoll-Platforms'
-downloader.download_and_unzip(direct_download_url, 'CS-Feat_v1-2', subfolder_name='Atoll-Platforms', flatten_directory=True)
+direct_download_url = f'https://nextcloud.eatlas.org.au/s/DcoZ33bMzeY5JaK/download?path=%2F{cs_feat_version}%2FAtoll-Platforms'
+downloader.download_and_unzip(direct_download_url, f'CS-Feat_{cs_feat_version}', subfolder_name='Atoll-Platforms', flatten_directory=True)
 
 # --------------------------------------------------------
 # Lawrey, E., Bycroft, R. (2025). North and West Australian Tropical Reef Features - Boundaries of coral reefs, 
 # rocky reefs, sand banks and intertidal zone (NESP-MaC 3.17, AIMS, Aerial Architecture). [Data set]. 
 # eAtlas. https://doi.org/10.26274/xj4v-2739
-# TODO: Temporarily disabled until v1-0 is complete.
-#direct_download_url = 'https://nextcloud.eatlas.org.au/s/ZbxtYci3A6WYnHc/download?path=%2Fv1-0'
-#downloader.download_and_unzip(direct_download_url, 'NW-Aus-Feat_v1-0', flatten_directory=True)
+
+direct_download_url = f'https://nextcloud.eatlas.org.au/s/ZbxtYci3A6WYnHc/download?path=%2F{nw_aus_feat_version}'
+downloader.download_and_unzip(direct_download_url, f'NW-Aus-Feat_{nw_aus_feat_version}', flatten_directory=True)
 
 
 # BATHYMETRY DATASETS
@@ -139,6 +141,17 @@ downloader.download(direct_download_url, os.path.join(downloader.download_path, 
 # Used for producing maps showing what reefs are in each marine park.
 direct_download_url = 'https://hub.arcgis.com/api/v3/datasets/2b3eb1d42b8d4319900cf4777f0a83b9_0/downloads/data?format=shp&spatialRefId=4283&where=1%3D1'
 downloader.download_and_unzip(direct_download_url, 'AU_DCCEEW_Australia-Marine-Parks_2025')
+
+
+# --------------------------------------------------------
+# UNEP-WCMC, WorldFish Centre, WRI, TNC (2021). Global distribution of warm-water coral reefs,
+# compiled from multiple sources including the Millennium Coral Reef Mapping Project. Version 4.1.
+# Includes contributions from IMaRS-USF and IRD (2005), IMaRS-USF (2005) and Spalding et al. (2001).
+# Cambridge (UK): UN Environment World Conservation Monitoring Centre. Data DOI: https://doi.org/10.34892/t2wk-5t34
+#subfolder_name='14_001_WCMC008_CoralReefs2021_v4_1'
+# This dataset was used for creating comparative analysis and maps.
+direct_download_url = 'https://datadownload-production.s3.us-east-1.amazonaws.com/WCMC008_CoralReefs2021_v4_1.zip'
+downloader.download_and_unzip(direct_download_url, 'World_WCMC_CoralReefs2021_v4_1', flatten_directory=True)
 
 # --------------------------------------------------------
 # Download the input data associated with this dataset. This includes all the manual edits that will

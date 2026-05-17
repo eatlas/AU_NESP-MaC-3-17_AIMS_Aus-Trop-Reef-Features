@@ -35,7 +35,7 @@ Inputs:
     - Crosswalk table: data/v0-4/in/RB_Type_L3_crosswalk.csv
 
 Outputs:
-    - Enriched features shapefile: working/06/TS-GBR-CS-NW-Features_{version}.shp
+    - Enriched features shapefile: data/{version}/out/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_{version}.shp
     - Unmatched features shapefile (if any): working/06/Feature-mismatched.shp
 
 Notes:
@@ -59,11 +59,13 @@ config = configparser.ConfigParser()
 config.read('config.ini')
 in_3p_path = config.get('general', 'in_3p_path')
 version = config.get('general', 'version')
+nw_aus_feat_version = config.get('general', 'nw_aus_feat_version')
 
-output_shp = f"working/06/TS-GBR-CS-NW-Features_{version}.shp"
+# output_shp = f"working/06/TS-GBR-CS-NW-Features_{version}.shp"
+output_shp = f'data/{version}/out/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_{version}.shp'
 
 # Find the cross walk in the NW-Aus-Feat_v0-4 dataset download.
-crosswalk_csv = os.path.join(in_3p_path, 'NW-Aus-Feat_v0-4', 'in', 
+crosswalk_csv = os.path.join(in_3p_path, f'NW-Aus-Feat_{nw_aus_feat_version}', 'in', 
                             'RB_Type_L3_crosswalk.csv')
 
 # Output fields from crosswalk to add
@@ -209,6 +211,7 @@ def main():
         engine='fiona'
     )
     print(f"Done! Output saved to {output_shp}")
+    print("Next step is uploading the new version to NextCloud on the eAtlas and updating the metadata record.")
 
 if __name__ == "__main__":
     main()
