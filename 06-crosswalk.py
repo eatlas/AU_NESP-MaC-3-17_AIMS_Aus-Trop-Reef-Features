@@ -49,6 +49,7 @@ import pandas as pd
 import geopandas as gpd
 import numpy as np
 import configparser
+from crosswalk_utils import load_crosswalk, validate_features
 
 # Input/output paths
 INPUT_SHP = "working/05/TS-GBR-CS-NW-Features-depth.shp"
@@ -57,16 +58,10 @@ MISMATCHED_SHP = "working/06/Feature-mismatched.shp"
 
 config = configparser.ConfigParser()
 config.read('config.ini')
-in_3p_path = config.get('general', 'in_3p_path')
 version = config.get('general', 'version')
-nw_aus_feat_version = config.get('general', 'nw_aus_feat_version')
 
 # output_shp = f"working/06/TS-GBR-CS-NW-Features_{version}.shp"
-output_shp = f'data/{version}/out/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_{version}.shp'
-
-# Find the cross walk in the NW-Aus-Feat_v0-4 dataset download.
-crosswalk_csv = os.path.join(in_3p_path, f'NW-Aus-Feat_{nw_aus_feat_version}', 'in', 
-                            'RB_Type_L3_crosswalk.csv')
+output_shp = f'data/{version}/out/full-classes/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_{version}.shp'
 
 # Output fields from crosswalk to add
 CROSSWALK_FIELDS = [
@@ -89,12 +84,8 @@ def main():
     print(f"  Loaded {len(gdf)} features.")
 
     print("Reading crosswalk table...")
-    crosswalk = pd.read_csv(crosswalk_csv, dtype=str).fillna('')
+    crosswalk = load_crosswalk()
     print(f"  Loaded {len(crosswalk)} crosswalk rows.")
-
-    # Prepare crosswalk for matching
-    crosswalk['DepthCat_v0-4_list'] = crosswalk['DepthCat_v0-4'].str.split(';').apply(lambda lst: [x.strip() for x in lst if x.strip()])
-    crosswalk['Attachment_v0-4_list'] = crosswalk['Attachment_v0-4'].str.split(';').apply(lambda lst: [x.strip() for x in lst if x.strip()])
 
     # Check for missing or empty DepthCat values before filling/replacing.
     # Previous scripts should have already set DepthCat to a value determined from bathymetry.
@@ -116,30 +107,9 @@ def main():
 
     # Prepare for matching
     print("Matching features to crosswalk...")
-    match_indices = []
-    crosswalk_indices = []
-    mismatched_indices = []
-
-    # Build a lookup for fast matching (by RB_Type_L3_v0-4)
-    crosswalk_lookup = {}
-    for idx, row in crosswalk.iterrows():
-        key = row['RB_Type_L3_v0-4']
-        crosswalk_lookup.setdefault(key, []).append((idx, row['Attachment_v0-4_list'], row['DepthCat_v0-4_list']))
-
-    for i, feat in gdf.iterrows():
-        key = feat['RB_Type_L3']
-        attachment = feat['Attachment']
-        depthcat = feat['DepthCat']
-        candidates = crosswalk_lookup.get(key, [])
-        found = False
-        for idx, attachment_list, depthcat_list in candidates:
-            if attachment in attachment_list and depthcat in depthcat_list:
-                match_indices.append(i)
-                crosswalk_indices.append(idx)
-                found = True
-                break
-        if not found:
-            mismatched_indices.append(i)
+    match_indices, crosswalk_indices, mismatched_indices = validate_features(
+        gdf, crosswalk, check_depthcat=True
+    )
 
     print(f"  Matched {len(match_indices)} features.")
     print(f"  {len(mismatched_indices)} features could not be matched.")

@@ -136,7 +136,7 @@ downloader.download(direct_download_url, os.path.join(downloader.download_path, 
 
 # --------------------------------------------------------
 # Australian Marine Parks
-# DCCEEW (2018). Australian Marine Parks (Version 10 Feb 2025) [Dataset]. Department of Agriculture, Water and the Environment. 
+# DCCEEW (2018). Australian Marine Parks (Version 10 Feb 2025) [Dataset]. Dept of Climate Change, Energy, the Environment & Water. 
 # https://fed.dcceew.gov.au/datasets/erin::australian-marine-parks/about
 # Used for producing maps showing what reefs are in each marine park.
 direct_download_url = 'https://hub.arcgis.com/api/v3/datasets/2b3eb1d42b8d4319900cf4777f0a83b9_0/downloads/data?format=shp&spatialRefId=4283&where=1%3D1'
@@ -152,6 +152,13 @@ downloader.download_and_unzip(direct_download_url, 'AU_DCCEEW_Australia-Marine-P
 # This dataset was used for creating comparative analysis and maps.
 direct_download_url = 'https://datadownload-production.s3.us-east-1.amazonaws.com/WCMC008_CoralReefs2021_v4_1.zip'
 downloader.download_and_unzip(direct_download_url, 'World_WCMC_CoralReefs2021_v4_1', flatten_directory=True)
+
+
+# --------------------------------------------------------
+
+# Used to adjust the bathymetry to LAT. Convert the MSL to LAT by subtracting the LAT-MSL difference.
+direct_download_url = 'https://nextcloud.eatlas.org.au/public.php/dav/files/8CTMtLc6QFaYmqb/out/AU_AIMS_EOT20-tide-stats_LPT_2021-01-2025-12.tif'
+downloader.download(direct_download_url, os.path.join(downloader.download_path, 'EOT20-tides', 'AU_AIMS_EOT20-tide-stats_LPT_2021-01-2025-12.tif'))
 
 # --------------------------------------------------------
 # Download the input data associated with this dataset. This includes all the manual edits that will

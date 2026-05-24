@@ -58,7 +58,7 @@ replaced one-to-one. When a single new feature replaces multiple old features
 exists. The script assigns a provisional centroid-based ID (prefixed PROV-) to
 make these features individually addressable for downstream analysis, while
 clearly signalling that the identifier is not permanent. The LABEL_IDs of all
-replaced features are recorded in an IDAliases attribute to maintain
+replaced features are recorded in a PrevReefID attribute to maintain
 traceability to the historical record.
 
 ### Classification of retained features
@@ -163,7 +163,7 @@ For each Reef Edit feature, assign attributes based on how it was matched:
     LABEL_ID.
   - Multiple LABEL_IDs, or the same LABEL_ID claimed by multiple new features:
     `ReefID` = provisional centroid-based ID (see below).
-    `IDAliases` = semicolon-separated LABEL_IDs.
+    `PrevReefID` = semicolon-separated LABEL_IDs.
 
 **Genuinely new features** (no CODE, no overlaps):
 - `CODES` = null.
@@ -195,7 +195,7 @@ For GBR features that survived steps 2-4:
 6. **Rename:** IMG_SRC → EdgeSrc, LABEL_ID → ReefID.
 7. **Dataset:** Retain original DATASET value.
 8. **CODES** = CODE (single value, copied from original).
-9. **IDAliases** = null.
+9. **PrevReefID** = null.
 
 ### 7. Prepare new features (Reef Edit)
 
@@ -230,7 +230,7 @@ For GBR features that survived steps 2-4:
 | `Dataset` | str | Original DATASET | `Aus-Trop-Reef-Features_{version}` |
 | `ReefID` | str | LABEL_ID | LABEL_ID (1:1) or PROV-{centroid} |
 | `CODES` | str | CODE | Semicolon-separated CODEs or null |
-| `IDAliases` | str | None | Semicolon-separated LABEL_IDs or null |
+| `PrevReefID` | str | None | Semicolon-separated LABEL_IDs or null |
 
 ## Validation checks
 

@@ -370,7 +370,7 @@ def main():
     used_prov_ids = set()
     reef_edit_reefid = {}
     reef_edit_codes_attr = {}
-    reef_edit_idaliases = {}
+    reef_edit_prevreefid = {}
 
     # 5a. Move features
     for edit_idx in move_edits.index:
@@ -378,7 +378,7 @@ def main():
         code = move_codes_map.get(edit_idx)
         reef_edit_reefid[edit_idx] = label_id
         reef_edit_codes_attr[edit_idx] = code
-        reef_edit_idaliases[edit_idx] = None
+        reef_edit_prevreefid[edit_idx] = None
 
     # 5b. Overlap features — first pass: determine which LABEL_IDs map 1:1
     # Count how many new features claim each LABEL_ID
@@ -402,28 +402,28 @@ def main():
         else:
             reef_edit_codes_attr[edit_idx] = None
 
-        # ReefID and IDAliases
+        # ReefID and PrevReefID
         if len(unique_labels) == 1:
             lid = unique_labels[0]
             if len(label_id_claimants.get(lid, [])) == 1:
                 # Exactly one new feature claims this LABEL_ID -> use it
                 reef_edit_reefid[edit_idx] = lid
-                reef_edit_idaliases[edit_idx] = None
+                reef_edit_prevreefid[edit_idx] = None
             else:
                 # Multiple new features claim the same LABEL_ID
                 centroid = overlap_edits.at[edit_idx, 'geometry'].centroid
                 reef_edit_reefid[edit_idx] = make_provisional_id(centroid, used_prov_ids)
-                reef_edit_idaliases[edit_idx] = lid
+                reef_edit_prevreefid[edit_idx] = lid
         elif len(unique_labels) > 1:
             # Multiple old LABEL_IDs merged
             centroid = overlap_edits.at[edit_idx, 'geometry'].centroid
             reef_edit_reefid[edit_idx] = make_provisional_id(centroid, used_prov_ids)
-            reef_edit_idaliases[edit_idx] = ';'.join(unique_labels)
+            reef_edit_prevreefid[edit_idx] = ';'.join(unique_labels)
         else:
             # Genuinely new (no overlap above threshold)
             centroid = overlap_edits.at[edit_idx, 'geometry'].centroid
             reef_edit_reefid[edit_idx] = make_provisional_id(centroid, used_prov_ids)
-            reef_edit_idaliases[edit_idx] = None
+            reef_edit_prevreefid[edit_idx] = None
 
     prov_count = sum(1 for v in reef_edit_reefid.values()
                      if v is not None and str(v).startswith('PROV-'))
@@ -503,9 +503,9 @@ def main():
     if 'DATASET' in gbr.columns:
         gbr = gbr.rename(columns={'DATASET': 'Dataset'})
 
-    # 6.7 CODES and IDAliases
+    # 6.7 CODES and PrevReefID
     gbr['CODES'] = gbr['CODE'] if 'CODE' in gbr.columns else None
-    gbr['IDAliases'] = None
+    gbr['PrevReefID'] = None
 
     # ------------------------------------------------------------------
     # Step 7: Prepare new features (Reef Edit)
@@ -519,7 +519,7 @@ def main():
     # Assign computed attributes
     new_features['ReefID'] = new_features.index.map(reef_edit_reefid)
     new_features['CODES'] = new_features.index.map(reef_edit_codes_attr)
-    new_features['IDAliases'] = new_features.index.map(reef_edit_idaliases)
+    new_features['PrevReefID'] = new_features.index.map(reef_edit_prevreefid)
     new_features['OrigType'] = new_features['RB_Type_L3']
     new_features['Dataset'] = f'Aus-Trop-Reef-Features_{VERSION}'
 
@@ -552,7 +552,7 @@ def main():
     output_columns = [
         'RB_Type_L3', 'Attachment', 'DepthCat', 'DepthCatSr',
         'FeatConf', 'TypeConf', 'EdgeSrc', 'EdgeAcc_m',
-        'OrigType', 'Dataset', 'ReefID', 'CODES', 'IDAliases', 'geometry'
+        'OrigType', 'Dataset', 'ReefID', 'CODES', 'PrevReefID', 'geometry'
     ]
 
     # Keep only output columns that exist (others are discarded)

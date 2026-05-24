@@ -7,6 +7,7 @@ superset of the attributes from the input shapefiles.
 
 import os
 import geopandas as gpd
+from crosswalk_utils import load_crosswalk, validate_features
 
 def main():
 
@@ -68,6 +69,23 @@ def main():
     # Print information about the merged dataset
     print(f"Merged dataset: {len(merged_gdf)} features")
     
+    # Validate feature classifications against the crosswalk
+    print("Validating feature classifications against crosswalk...")
+    crosswalk = load_crosswalk()
+    _, _, mismatched_indices = validate_features(merged_gdf, crosswalk, check_depthcat=False)
+
+    if mismatched_indices:
+        mismatched_gdf = merged_gdf.iloc[mismatched_indices]
+        mismatch_output = os.path.join(output_dir, 'Feature-mismatched.shp')
+        mismatched_gdf.to_file(mismatch_output)
+        print(f"ERROR: {len(mismatched_indices)} features have invalid (RB_Type_L3, Attachment) combinations.")
+        print(f"  Mismatched features saved to {mismatch_output}")
+        print("Summary of mismatches (by RB_Type_L3, Attachment):")
+        print(mismatched_gdf.groupby(['RB_Type_L3', 'Attachment']).size())
+        print("Aborting. Fix the feature classifications before proceeding.")
+        return
+    print(f"  All {len(merged_gdf)} features have valid classifications.")
+
     # Save the merged shapefile
     print(f"Saving merged shapefile to: {output_path}")
     merged_gdf.to_file(output_path)

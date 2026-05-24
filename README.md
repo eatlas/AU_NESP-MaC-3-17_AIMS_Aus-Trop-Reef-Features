@@ -1,19 +1,19 @@
 # Australian Tropical Reef Features
 This dataset is a compilation and standarisation of multiple reef mapping datasets to produce a national scale dataset that covers rocky and coral reefs for tropical Australia. It combines mapping from:
-1. GBRMPA GBR Features extracted from Lawrey and Stewart, 2016, and improved through 990 manual edits.
+1. GBRMPA GBR Features extracted from Lawrey and Stewart, 2016, and improved through manual edits, mostly on the inshore areas.
 2. Torres Strait Features (Lawrey and Stewart, 2016)
 3. Coral Sea Features (Lawrey and Bycroft, 2025a)
 4. North and West Australian Features (Lawrey and Bycroft, 2025b)
 
-All features were standardised to the Reef Boundary Type v0-4 classification. Where depth categories were not previously assigned (Torres Strait, GBR and ~30% of the North and West Features) the depth of the features was estimated using two datasets. For reefs inside the EEZ the Multi-resolution bathymetry composite surface for Australian waters (EEZ) (Flukes, 2024) was used. For reefs outside the EEZ the AusBathyTopo (Australia) 250m 2024 (Geoscience Australia, 2024) bathymetry was used.
+All features were standardised to the Reef Boundary Type v0-4 classification. Where depth categories were not previously assigned (Torres Strait, GBR) the depth of the features was estimated using two datasets. For reefs inside the EEZ the Multi-resolution bathymetry composite surface for Australian waters (EEZ) (Flukes, 2024) was used. For reefs outside the EEZ the AusBathyTopo (Australia) 250m 2024 (Geoscience Australia, 2024) bathymetry was used.
 
 Each of the features were assigned their sovereignty using Flanders Marine Institute, 2024, to allow easy filtering of reefs to those inside the Australian EEZ.
 
-After the depth category estimation the `RB_Type_L3`, `Attachment` and `DepthCat` were used to crosswalk to the Natural Values Common Language and the Seamap Australia Classification scheme. 
+After depth category estimation the `RB_Type_L3`, `Attachment` and `DepthCat` are used to crosswalk to the Natural Values Common Language and the Seamap Australia Classification scheme. 
 
 ## Dataset metadata
 To download and find out more information see the metadata record for this dataset:
-Lawrey, E., Bycroft, R. (2025). Australian Tropical Reef Features - Boundaries of coral and rocky reefs (NESP MaC 3.17, AIMS) (Version v0-1) [Data set]. eAtlas. https://doi.org/10.26274/4RRW-RR88
+Lawrey, E., Bycroft, R. (2025). Australian Tropical Reef Features - Boundaries of coral and rocky reefs (NESP MaC 3.17, AIMS) (Version v0-9) [Data set]. eAtlas. https://doi.org/10.26274/4RRW-RR88
 
 ## Environment Setup
 The following is the setup needed to reproduce or extend this dataset. All input files are available for download and the output files are a direct result of running the processing scripts. All modifications to the TS-GBR-Features datasets are recorded as modification shapefiles allowing full reproducibility. 
@@ -46,9 +46,9 @@ You are now ready to run the scripts that generate the dataset.
 # Reproducing this dataset:
 This section details how to reproduce this dataset from scratch starting with just the source code.
 1. Clone this dataset to your local machine. For this you will need Git installed, or you will need to download the zipped version of the source from GitHub.
-2. Edit the `config.ini` to specify where you want to store the downloaded input datasets. In my case I am saving them to temporary folder. The total space needed for the input data is 74 GB. Much of this storage is needed for the bathymetry datasets. You may also want the Sentinel 2 imagery, which is an additional 
+2. Edit the `config.ini` to specify where you want to store the downloaded input datasets. The total space needed for the input data is 274 GB. Much of this storage is needed for the bathymetry and satellite imagery datasets. 
 3. Setup your Python environment to run the scripts for the dataset (see the Python setup section)
-4. Run `python 01a-download-input-data.py` to download the input source datasets. This downloads the third party datasets, such as the source reef boundary datasets and bathymetry data, but also the manual correction datasets that were created for this dataset. These are stored in `data/v0-1/in` where v0-1 corresponds to the current version. Note the version number is specified in `config.ini`. This script will take a long time to run as it involves downloading a lot of data (74 GB). The script is restartable, in that it will not redownload a file that it has already downloaded previously. This means if one of the downloads fail for some reason, rerunning the script will mean it doesn't need to start from scratch. It does not, however, resume mid-download of a single dataset.
+4. Run `python 01a-download-input-data.py` to download the input source datasets. This downloads the third party datasets, such as the source reef boundary datasets and bathymetry data, and the manual correction datasets that were created for this dataset. These are stored in `data/{version}/in` where {version} is the current version of the dataset. Note the version number is specified in `config.ini`. This script will take a long time to run as it involves downloading a lot of data. The script is restartable, in that it will not redownload a file that it has already downloaded previously. This means if one of the downloads fail for some reason, rerunning the script will mean it doesn't need to start from scratch. It does not, however, resume mid-download of a single dataset.
 5. Download the satellite imagery by running `python 01b-download-sentinel2.py`. Setup virtual rasters for the satellite imagery by running:
 ```bash
 python 01c-create-virtual-rasters.py --base-dir data/{version}/in-3p/S2
@@ -63,9 +63,20 @@ python 01c-create-virtual-rasters.py --base-dir data/{version}/in-3p/S2
 
     Make sure that the shape file is at the path: `{in_3p_path}\EEZ-land-union_2024\EEZ_land_union_v4_202410.shp`
 
-09. Run `04-add-country-attribute.py` uses the world EEZ dataset to add sovereignty information to each reef. 
+9. Run `04-add-country-attribute.py` uses the world EEZ dataset to add sovereignty information to each reef. 
 10. Run `05-add-depth.py`. This assigns a depth classification to each reef that has not already been assigned a depth category. Some of the source datasets (such as CS Features and many of the NW-Aus-Features) already have the `DepthCat` already set and so these are not overridden by this process. This is to ensure that we retain any source depth classification that are likely to be more accurate than that determined from the bathymetry dataset. This is because for most reefs there is no sufficiently high resolution bathymetry to accurately determine the peak height (shallowest portion) of the reef. When trying to determine the highest peak of the lagoonal reefs in the Coral Sea we found that for small reefs (~100 m) across the error in the peak height from 30 m resolution bathyemtry was 7 - 9 m and for 100 m bathymetry the error can be as much as 30 - 40 m. For this reason we have shifted the `DepthCat` classification to be based on the 90th height. 
 11. Run `06-cross-walk.py`. This script performs the crosswalk to the Natural Values Common Language, adding attributes `NvclEco` and `NcvlEcoCom`. This script also determines the minimum length string field needed to store each attribute to create a more compact final output shapefile. 
+
+## Preview maps
+1. Use QGIS to recreate the preview images. Load: `data/{version}/ATR1-working.qgz`. Correct any path issues.
+2. Use the Layout manager to open and export each preview map.
+3. Install the [QGIS Animated Atlas plugin](https://github.com/open-AIMS/qgis-animated-atlas).
+4. Export `ATRF1-Overview-animation` atlas. Save to a location not on OneDrive, such as `C:\temp\ATR1-animation`. This Atlas is controlled by the layers in the `Overview-animation` layer group. Export at 1920x1024 resolution. This export takes about 1 hour.
+5. Use FFMpeg to convert the frames into a video:
+```bash
+ffmpeg -framerate 30 -i C:/temp/ATR1-animation/frame_%06d.png -c:v libx264 -crf 24 -pix_fmt yuv420p data/v0-9/previews/ATRF1-Overview-animation.mp4
+```
+
 
 ## Moving the 3rd party data download out of One Drive using a Symbolic link (Windows)
 

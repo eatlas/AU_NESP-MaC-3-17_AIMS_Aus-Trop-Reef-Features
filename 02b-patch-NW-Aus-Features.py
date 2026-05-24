@@ -37,7 +37,8 @@ def main(perform_clipping=False):
     # Retain only the specified columns (plus geometry)
     columns_to_keep = [
         'EdgeSrc', 'EdgeAcc_m', 'FeatConf', 'TypeConf',
-        'DepthCat', 'DepthCatSr', 'RB_Type_L3', 'Attachment'
+        'DepthCat', 'DepthCatSr', 'RB_Type_L3', 'Attachment',
+        'ReefID', 'PrevReefID'
     ]
     columns_to_keep_with_geom = [col for col in columns_to_keep if col in gdf.columns]
     if 'geometry' in gdf.columns:
