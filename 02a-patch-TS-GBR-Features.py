@@ -2,6 +2,12 @@
 Australian Tropical Reef Feature Patching Script (v0-9+)
 ========================================================
 
+CURRENT WORKFLOW: Use this script for v0-9 onwards, including v1-0.
+Run 01d-refresh-TS-GBR-Features.py first.
+The similarly named 02a-patch-TS-GBR-Features_v0-1.py is retained only for
+historical reference to v0-1; do not run it as part of the current workflow.
+Both scripts write to the same intermediate output path.
+
 This script integrates newly mapped reef features (Reef Edit) with the existing
 GBR-TS features dataset. It replaces, removes and retains features as appropriate.
 
@@ -18,12 +24,13 @@ Three integration scenarios are handled:
 Processing order: moves, then removals, then overlap replacements.
 
 Inputs:
-  - GBR-TS features (third-party)
+    - Refreshed GBR-TS features produced by 01d-refresh-TS-GBR-Features.py
   - Reef Edit polygons with full RB_Type_L3 attributes
   - Remove-Move points
   - RB_Type_L3 crosswalk CSV (for retained old features)
 
 Output: working/02/TS-GBR-Features-patched.shp
+        working/02/debug-reefid-review.gpkg (identifier review layers)
 
 Part of: NESP Marine and Coastal Hub Project 3.17
 """
@@ -35,11 +42,24 @@ import os
 import sys
 import configparser
 from shapely.ops import unary_union
+from shapely.validation import explain_validity
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-IOU_THRESHOLD = 0.1  # Minimum IoU for inheriting CODE/ReefID from old feature
+# Erosion distance below which an intersection is treated as a digitising sliver
+SLIVER_TOLERANCE_M = 10
+# The tolerance is never more than this fraction of the smaller feature's width,
+# so that a feature only a few tens of metres across is not erased by the test
+SLIVER_WIDTH_FRACTION = 0.25
+# Minimum share of either polygon's area for a candidate lineage relationship
+CANDIDATE_SHARE = 0.1
+# Factor by which the best candidate must exceed the next best to inherit ReefID
+DOMINANCE_RATIO = 3.0
+# Area ratio above which an inherited relationship is reported for review
+SIZE_CHANGE_REPORT = 5.0
+# Recognised ACTION values in the Remove-Move point file
+VALID_ACTIONS = {'Move', 'Remove', 'Link'}
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -49,20 +69,23 @@ config.read('config.ini')
 in_3p_path = config.get('general', 'in_3p_path')
 in_path = config.get('general', 'in_path')
 VERSION = config.get('general', 'version')
+NW_AUS_FEAT_VERSION = config.get('general', 'nw_aus_feat_version')
 
 # Input paths
-gbr_path = os.path.join(in_3p_path, "TS-GBR-Feat",
-                        "TS_AIMS_NESP_Torres_Strait_Features_V1b_with_GBR_Features.shp")
+gbr_path = os.path.join("working", "01", "TS-GBR-Features-latest.shp")
 reef_edit_path = os.path.join(in_path, "Reef-edit",
                               f"AIMS_GBR-TS-Features_Edit_{VERSION}.shp")
 remove_move_path = os.path.join(in_path, "Reef-remove-move",
                                 f"AIMS_GBR-TS-Features_remove-move_{VERSION}.shp")
-crosswalk_path = os.path.join(in_3p_path, "NW-Aus-Feat_v1-0", "in",
+crosswalk_path = os.path.join(in_3p_path, f"NW-Aus-Feat_{NW_AUS_FEAT_VERSION}", "in",
                               "RB_Type_L3_crosswalk.csv")
+inshore_extent_path = os.path.join("data", VERSION, "extras", "inshore-extent",
+                                   "inshore-extent.shp")
 
 # Output
 output_dir = "working/02"
 output_path = os.path.join(output_dir, "TS-GBR-Features-patched.shp")
+review_path = os.path.join(output_dir, "debug-reefid-review.gpkg")
 
 
 # ---------------------------------------------------------------------------
@@ -126,17 +149,84 @@ def make_provisional_id(centroid, used_ids):
     return candidate
 
 
-def compute_iou(geom_a, geom_b):
-    """Intersection-over-union of two geometries."""
-    if geom_a is None or geom_b is None:
-        return 0.0
-    intersection = geom_a.intersection(geom_b).area
-    if intersection == 0:
-        return 0.0
-    union = geom_a.union(geom_b).area
-    if union == 0:
-        return 0.0
-    return intersection / union
+def inscribed_width(geom, limit):
+    """Width of the widest part of a polygon, found by bisection on erosion.
+
+    Returns 2 * limit for anything at least that wide, since the callers only
+    care about the narrow end of the range.
+    """
+    if not geom.buffer(-limit).is_empty:
+        return 2 * limit
+    lo, hi = 0.0, limit
+    for _ in range(16):
+        mid = (lo + hi) / 2
+        if geom.buffer(-mid).is_empty:
+            hi = mid
+        else:
+            lo = mid
+    return 2 * lo
+
+
+def sliver_tolerance(old_geom, new_geom):
+    """Erosion distance to use for a pair, reduced for small features.
+
+    A fixed tolerance cannot judge a feature whose whole width is comparable to
+    the tolerance itself, because eroding it leaves nothing whatever the overlap
+    represents. The tolerance is therefore capped at a fraction of the width of
+    the smaller of the two polygons.
+    """
+    smaller = old_geom if old_geom.area <= new_geom.area else new_geom
+    limit = SLIVER_TOLERANCE_M / SLIVER_WIDTH_FRACTION / 2
+    if not smaller.buffer(-limit).is_empty:
+        return SLIVER_TOLERANCE_M
+    return min(SLIVER_TOLERANCE_M,
+               SLIVER_WIDTH_FRACTION * inscribed_width(smaller, limit))
+
+
+def score_pair(old_geom, new_geom):
+    """Score an old/new polygon pair in an equal-area projection.
+
+    Returns None where the polygons do not intersect, otherwise a dict holding
+    the intersection geometry, its area, the share of each polygon's area that
+    the intersection represents, and whether the intersection survives erosion.
+    Erosion distinguishes a genuine overlap from a long thin contact produced by
+    coordinate precision or an eye-judged division. The erosion distance is
+    SLIVER_TOLERANCE_M, reduced on small features by sliver_tolerance.
+    """
+    if old_geom is None or new_geom is None:
+        return None
+    intersection = old_geom.intersection(new_geom)
+    if intersection.is_empty:
+        return None
+    area = intersection.area
+    if area <= 0:
+        return None
+    old_area = old_geom.area
+    new_area = new_geom.area
+    # A multipart intersection survives if any part survives erosion.
+    survives = not intersection.buffer(-SLIVER_TOLERANCE_M).is_empty
+    tolerance = SLIVER_TOLERANCE_M
+    if not survives:
+        tolerance = sliver_tolerance(old_geom, new_geom)
+        if tolerance < SLIVER_TOLERANCE_M:
+            survives = not intersection.buffer(-tolerance).is_empty
+    return {
+        'geometry': intersection,
+        'area': area,
+        'share_old': area / old_area if old_area > 0 else 0.0,
+        'share_new': area / new_area if new_area > 0 else 0.0,
+        'survives': survives,
+        'tolerance': tolerance,
+    }
+
+
+def write_review_layer(gdf, layer_name):
+    """Write a review layer to the review GeoPackage, skipping empty layers."""
+    if len(gdf) == 0:
+        print(f"    {layer_name}: 0 records (layer not written)")
+        return
+    gdf.to_file(review_path, layer=layer_name, driver='GPKG')
+    print(f"    {layer_name}: {len(gdf)} records")
 
 
 # ---------------------------------------------------------------------------
@@ -178,6 +268,19 @@ def main():
             print(f"ERROR: {null_count} null geometries in {name}")
             sys.exit(1)
 
+    # Invalid edit polygons can trigger opaque GEOS errors after reprojection.
+    invalid_edit_mask = ~reef_edit.geometry.is_valid
+    if invalid_edit_mask.any():
+        invalid_edits = reef_edit[invalid_edit_mask].copy()
+        invalid_edits['geom_issue'] = invalid_edits.geometry.apply(explain_validity)
+        debug_path = os.path.join(output_dir, "debug-invalid-reef-edit.shp")
+        invalid_edits.to_file(debug_path)
+        print(f"ERROR: {len(invalid_edits)} invalid geometries in Reef Edit:")
+        for idx, row in invalid_edits.iterrows():
+            print(f"  Index {idx}, CODE={row.get('CODE')}: {row['geom_issue']}")
+        print(f"  Saved invalid Reef Edit features to {debug_path}")
+        sys.exit(1)
+
     # Normalise CODE columns: treat empty strings as null
     for gdf in [gbr, reef_edit]:
         gdf.loc[gdf['CODE'].astype(str).str.strip() == '', 'CODE'] = None
@@ -187,12 +290,17 @@ def main():
     # ------------------------------------------------------------------
     print("\nStep 2: Processing move operations")
 
-    # Identify Reef Edit features with CODE set (move operations)
-    move_mask = reef_edit['CODE'].notna()
-    move_edits = reef_edit[move_mask].copy()
-    overlap_edits = reef_edit[~move_mask].copy()
-    print(f"  {len(move_edits)} Reef Edit features with CODE (moves)")
-    print(f"  {len(overlap_edits)} Reef Edit features without CODE (overlaps/new)")
+    unknown_actions = set(remove_move['ACTION'].dropna().unique()) - VALID_ACTIONS
+    if unknown_actions:
+        print(f"ERROR: Unrecognised ACTION values in Remove-Move: "
+              f"{sorted(unknown_actions)}")
+        print(f"  Supported values are {sorted(VALID_ACTIONS)}")
+        sys.exit(1)
+
+    # Reef Edit features with CODE set record an explicit link to an old feature
+    coded_mask = reef_edit['CODE'].notna()
+    print(f"  {int(coded_mask.sum())} Reef Edit features carry a CODE")
+    print(f"  {int((~coded_mask).sum())} Reef Edit features matched by overlap alone")
 
     # Build CODE lookup on the full (unfiltered) GBR — move/remove points
     # can target island/cay features that would otherwise be filtered out.
@@ -208,6 +316,7 @@ def main():
     # Spatially join Move points to unfiltered GBR to find which CODEs they hit
     move_point_codes = set()
     unmatched_move_points = []
+    code_to_move_points = {}  # CODE -> list of Move point indices
     gbr_sindex = gbr.sindex
     for pt_idx, pt_row in move_points.iterrows():
         pt_geom = pt_row.geometry
@@ -220,6 +329,7 @@ def main():
         else:
             for _, m in matches.iterrows():
                 move_point_codes.add(m['CODE'])
+                code_to_move_points.setdefault(m['CODE'], []).append(pt_idx)
 
     if unmatched_move_points:
         debug_path = os.path.join(output_dir, "debug-unmatched-move-points.shp")
@@ -228,13 +338,28 @@ def main():
               f"any GBR feature. Saved to {debug_path}")
         sys.exit(1)
 
-    reef_edit_codes = set(move_edits['CODE'].dropna().unique())
+    reef_edit_codes = set(reef_edit.loc[coded_mask, 'CODE'].unique())
 
     # Validate one-to-one correspondence
     only_in_points = move_point_codes - reef_edit_codes
     only_in_edits = reef_edit_codes - move_point_codes
     if only_in_points:
+        # Save the offending Move points to a shapefile to aid investigation
+        bad_pt_indices = sorted({
+            pt_idx
+            for code in only_in_points
+            for pt_idx in code_to_move_points.get(code, [])
+        })
+        bad_points = move_points.loc[bad_pt_indices].copy()
+        bad_points['bad_CODE'] = [
+            next(code for code in only_in_points
+                 if pt_idx in code_to_move_points.get(code, []))
+            for pt_idx in bad_pt_indices
+        ]
+        debug_path = os.path.join(output_dir, "debug-unmatched-move-codes.shp")
+        bad_points.to_file(debug_path)
         print(f"ERROR: Move point CODEs not found in Reef Edit: {only_in_points}")
+        print(f"  Saved {len(bad_points)} offending Move points to {debug_path}")
         sys.exit(1)
     if only_in_edits:
         # CODEs in Reef Edit but not in Move points are disambiguation codes,
@@ -244,18 +369,12 @@ def main():
         print(f"  Note: {len(only_in_edits)} Reef Edit CODEs have no corresponding "
               f"Move point (disambiguation CODEs)")
 
-    # Record LABEL_IDs and mark GBR features for deletion
-    move_label_ids = {}   # Reef Edit index -> LABEL_ID
-    move_codes_map = {}   # Reef Edit index -> CODE
+    # Mark the coded GBR features for deletion. Identifier inheritance is decided
+    # later by the candidate allocation, not by the presence of a CODE.
     gbr_delete_move = set()
-    for edit_idx, edit_row in move_edits.iterrows():
-        code = edit_row['CODE']
+    for code in sorted(reef_edit_codes):
         if code in gbr_code_to_idx:
-            gbr_indices = gbr_code_to_idx[code]
-            label_id = gbr.at[gbr_indices[0], 'LABEL_ID']
-            move_label_ids[edit_idx] = label_id
-            move_codes_map[edit_idx] = code
-            gbr_delete_move.update(gbr_indices)
+            gbr_delete_move.update(gbr_code_to_idx[code])
         else:
             print(f"WARNING: CODE {code} from Reef Edit not found in GBR features")
 
@@ -291,152 +410,402 @@ def main():
     print(f"  Marking {len(gbr_delete_remove)} GBR features for deletion (removal)")
 
     # ------------------------------------------------------------------
-    # Apply move/remove deletions and Island/Mainland/Other filter together
+    # Step 4: Score every intersecting old/new polygon pair
     # ------------------------------------------------------------------
-    print("\n  Applying deletions and filtering Island/Mainland/Other")
-    all_delete = gbr_delete_move | gbr_delete_remove
+    print("\nStep 4: Scoring old/new polygon pairs")
 
     # Save island/mainland for attachment calculation before filtering
     islands_mainland = gbr[gbr['LEVEL_1'].isin(['Island', 'Mainland'])].copy()
-
-    # Remove: move/remove targets + Island/Mainland/Other
     filter_mask = gbr['LEVEL_1'].isin(['Island', 'Mainland', 'Other'])
-    drop_indices = set(gbr.index[filter_mask]) | all_delete
-    original_count = len(gbr)
-    gbr = gbr.drop(index=drop_indices).reset_index(drop=True)
-    print(f"  Removed {original_count - len(gbr)} features "
-          f"({len(all_delete)} move/remove, rest Island/Mainland/Other), "
-          f"{len(gbr)} remaining")
 
-    # Rebuild spatial index after deletions
-    gbr_sindex = gbr.sindex
+    # Old features that could still appear in the output. Anything a new feature
+    # intersects is deleted from this set, because the old boundary is superseded.
+    retainable = set(gbr.index[~filter_mask]) - gbr_delete_move - gbr_delete_remove
 
-    # ------------------------------------------------------------------
-    # Step 4: Process overlap replacements
-    # ------------------------------------------------------------------
-    print("\nStep 4: Processing overlap replacements")
+    # Coded targets are already deleted by the move, but they still supply
+    # identifiers, so they are scored as well. Remove-point targets are false
+    # positives and must never contribute an identifier.
+    code_targets = set()
+    for code in reef_edit_codes:
+        code_targets.update(gbr_code_to_idx.get(code, []))
+    scoring_index = sorted((retainable | code_targets) - gbr_delete_remove)
+    print(f"  {len(scoring_index)} old features scored "
+          f"({len(code_targets - retainable)} of them retained only as CODE targets)")
 
-    # For IoU computation we need an equal-area projection
+    # Areas and intersections are computed in an equal-area projection
     gbr_3577 = gbr.to_crs(epsg=3577)
-    overlap_edits_3577 = overlap_edits.to_crs(epsg=3577)
+    reef_edit_3577 = reef_edit.to_crs(epsg=3577)
+    gbr_areas = gbr_3577.geometry.area
+    edit_areas = reef_edit_3577.geometry.area
+    gbr_label = gbr['LABEL_ID']
+    gbr_code = gbr['CODE']
 
-    # Track per-edit: which GBR features overlap, their CODEs/LABEL_IDs
-    overlap_info = {}       # edit_idx -> {'codes': [...], 'label_ids': [...]}
-    gbr_delete_overlap = set()
+    scoring = gbr.loc[scoring_index]
+    scoring_sindex = scoring.sindex
 
-    for edit_idx, edit_row in overlap_edits_3577.iterrows():
-        edit_geom = edit_row.geometry
-        # Use the 4283 geometry for spatial index query (index is on gbr, not gbr_3577)
-        edit_geom_4283 = overlap_edits.loc[edit_idx, 'geometry']
-        candidates = list(gbr_sindex.intersection(edit_geom_4283.bounds))
-        if not candidates:
-            overlap_info[edit_idx] = {'codes': [], 'label_ids': []}
-            continue
-
-        codes = []
-        label_ids = []
-        for gbr_local_idx in candidates:
-            gbr_geom_3577 = gbr_3577.iloc[gbr_local_idx].geometry
-            # Check any intersection first
-            if not edit_geom.intersects(gbr_geom_3577):
+    pairs = {}  # (old_idx, edit_idx) -> scored record
+    for edit_idx, edit_geom_3577 in reef_edit_3577.geometry.items():
+        bounds = reef_edit.geometry.loc[edit_idx].bounds
+        for pos in scoring_sindex.intersection(bounds):
+            old_idx = scoring.index[pos]
+            scored = score_pair(gbr_3577.geometry.loc[old_idx], edit_geom_3577)
+            if scored is None:
                 continue
-            # Any intersection -> mark for deletion
-            gbr_real_idx = gbr.index[gbr_local_idx]
-            gbr_delete_overlap.add(gbr_real_idx)
-            # Check IoU for CODE/LABEL_ID inheritance
-            iou = compute_iou(edit_geom, gbr_geom_3577)
-            if iou >= IOU_THRESHOLD:
-                code = gbr.at[gbr_real_idx, 'CODE']
-                label_id = gbr.at[gbr_real_idx, 'LABEL_ID']
-                if pd.notna(code):
-                    codes.append(code)
-                if pd.notna(label_id):
-                    label_ids.append(label_id)
-        overlap_info[edit_idx] = {'codes': codes, 'label_ids': label_ids}
+            scored.update({'old_idx': old_idx, 'edit_idx': edit_idx, 'forced': None})
+            pairs[(old_idx, edit_idx)] = scored
 
-    print(f"  {len(gbr_delete_overlap)} GBR features to delete (overlapped by new features)")
-    overlap_with_codes = sum(1 for v in overlap_info.values() if v['codes'])
-    overlap_new = sum(1 for v in overlap_info.values() if not v['codes'])
-    print(f"  {overlap_with_codes} new features inherit CODEs, "
-          f"{overlap_new} are genuinely new or have no significant overlap")
+    slivers = sum(1 for p in pairs.values() if not p['survives'])
+    rescued = sum(1 for p in pairs.values()
+                  if p['survives'] and p['tolerance'] < SLIVER_TOLERANCE_M)
+    print(f"  {len(pairs)} intersecting pairs, {slivers} rejected as digitising slivers")
+    print(f"  {rescued} small-feature pairs kept by a reduced sliver tolerance")
 
-    gbr = gbr.drop(index=gbr_delete_overlap).reset_index(drop=True)
+    # Any intersection with a new feature deletes the old feature
+    gbr_delete_overlap = {old_idx for (old_idx, _) in pairs if old_idx in retainable}
+    print(f"  {len(gbr_delete_overlap)} GBR features to delete "
+          f"(overlapped by new features)")
+
+    # --- Candidate relationships -------------------------------------------
+    candidates = {}
+    for key, pair in pairs.items():
+        if not pair['survives']:
+            continue
+        if max(pair['share_old'], pair['share_new']) >= CANDIDATE_SHARE:
+            candidates[key] = dict(pair)
+
+    def force_candidate(old_idx, edit_idx, reason):
+        """Add a forced candidate relationship. Returns False if already present."""
+        key = (old_idx, edit_idx)
+        if key in candidates:
+            return False
+        record = dict(pairs.get(key, {
+            'geometry': None, 'area': 0.0, 'share_old': 0.0, 'share_new': 0.0,
+            'survives': False, 'old_idx': old_idx, 'edit_idx': edit_idx,
+        }))
+        record['forced'] = reason
+        candidates[key] = record
+        return True
+
+    # A repeated or displaced CODE forces a relationship regardless of geometry
+    coded_no_overlap = 0
+    for edit_idx, code in reef_edit.loc[coded_mask, 'CODE'].items():
+        for old_idx in gbr_code_to_idx.get(code, []):
+            force_candidate(old_idx, edit_idx, 'CODE')
+            if (old_idx, edit_idx) not in pairs:
+                coded_no_overlap += 1
+    print(f"  {len(candidates)} candidate relationships "
+          f"({coded_no_overlap} coded pairs with no geometric overlap)")
+
+    # --- Link override points ----------------------------------------------
+    link_points = remove_move[remove_move['ACTION'] == 'Link'].copy()
+    override_problems = []   # (point index, ACTION, ReefID, reason)
+    links_applied = 0
+    if len(link_points) > 0:
+        print(f"  {len(link_points)} Link points")
+        edit_sindex = reef_edit.sindex
+        for pt_idx, pt_row in link_points.iterrows():
+            pt = pt_row.geometry
+            old_matches = [scoring.index[pos]
+                           for pos in scoring_sindex.intersection(pt.bounds)
+                           if scoring.geometry.iloc[pos].contains(pt)]
+            new_matches = [reef_edit.index[pos]
+                           for pos in edit_sindex.intersection(pt.bounds)
+                           if reef_edit.geometry.iloc[pos].contains(pt)]
+            if not old_matches or not new_matches:
+                override_problems.append(
+                    (pt_idx, 'Link', None,
+                     'Obsolete: point is not inside both an old and a new polygon'))
+                continue
+            old_idx, edit_idx = old_matches[0], new_matches[0]
+            reef_id = gbr_label.get(old_idx)
+            key = (old_idx, edit_idx)
+            if key not in pairs:
+                override_problems.append(
+                    (pt_idx, 'Link', reef_id,
+                     'Obsolete: the linked polygons no longer intersect'))
+                continue
+            existing = candidates.get(key)
+            if existing is not None:
+                reason = ('Unnecessary: the relationship already qualifies on its own'
+                          if existing['forced'] is None
+                          else 'Unnecessary: the relationship is already set by CODE')
+                override_problems.append((pt_idx, 'Link', reef_id, reason))
+                continue
+            force_candidate(old_idx, edit_idx, 'Link')
+            links_applied += 1
+        print(f"  {links_applied} Link points applied, "
+              f"{len(override_problems)} reported for review")
 
     # ------------------------------------------------------------------
-    # Step 5: Assign ReefID and CODES for new features
+    # Step 5: Allocate ReefID, PrevReefID and ReefFID
     # ------------------------------------------------------------------
-    print("\nStep 5: Assigning ReefID and CODES for new features")
+    print("\nStep 5: Allocating identifiers")
+
+    old_with_candidate = {record['old_idx'] for record in candidates.values()}
+
+    # LABEL_ID is not unique in the source: a reef and its associated rock or
+    # island can share one identifier across several polygons. Allocation is
+    # therefore grouped by identifier rather than by polygon, so that an
+    # official identifier can only ever pass to one new feature.
+    candidates_by_id = {}    # ReefID -> {edit_idx: aggregated record}
+    candidates_by_edit = {}  # edit_idx -> list of candidate records
+    for record in candidates.values():
+        candidates_by_edit.setdefault(record['edit_idx'], []).append(record)
+        reef_id = gbr_label.get(record['old_idx'])
+        if pd.isna(reef_id):
+            continue
+        group = candidates_by_id.setdefault(reef_id, {})
+        aggregated = group.get(record['edit_idx'])
+        if aggregated is None:
+            group[record['edit_idx']] = {
+                'edit_idx': record['edit_idx'],
+                'area': record['area'],
+                'old_idx': [record['old_idx']],
+                'forced': record['forced'],
+            }
+        else:
+            aggregated['area'] += record['area']
+            aggregated['old_idx'].append(record['old_idx'])
+            if record['forced'] is None:
+                aggregated['forced'] = None
+            elif aggregated['forced'] == 'Link' and record['forced'] == 'CODE':
+                aggregated['forced'] = 'CODE'
+
+    winners = {}          # ReefID -> edit_idx that inherits the official ReefID
+    groups_clear = 0      # split groups with a dominant successor
+    groups_referred = 0   # split groups referred to GBRMPA
+    for reef_id, group in candidates_by_id.items():
+        ranked = sorted(group.values(), key=lambda r: (-r['area'], str(r['edit_idx'])))
+        best = ranked[0]
+        runner_up = ranked[1]['area'] if len(ranked) > 1 else 0.0
+        if best['forced'] == 'Link':
+            # A Link only ever produces a previous identifier
+            winner = None
+        elif len(ranked) > 1 and best['area'] <= 0:
+            # Several coded features, none overlapping: no basis to choose
+            winner = None
+        elif runner_up <= 0 or best['area'] >= DOMINANCE_RATIO * runner_up:
+            winner = best['edit_idx']
+        else:
+            winner = None
+        if winner is not None:
+            winners[reef_id] = winner
+        if len(ranked) > 1:
+            if winner is None:
+                groups_referred += 1
+            else:
+                groups_clear += 1
+
+    won_by_edit = {}
+    for reef_id, edit_idx in winners.items():
+        won_by_edit.setdefault(edit_idx, []).append(reef_id)
+
+    def resolve_merge(edit_idx, won):
+        """Pick the identifier a merged feature keeps, or None where none dominates."""
+        ranked = sorted(won, key=lambda r: -candidates_by_id[r][edit_idx]['area'])
+        best = candidates_by_id[ranked[0]][edit_idx]['area']
+        runner_up = candidates_by_id[ranked[1]][edit_idx]['area']
+        if best > 0 and best >= DOMINANCE_RATIO * runner_up:
+            return ranked[0]
+        return None
+
+    # A feature can only hold one identity, so a merge keeps the dominant
+    # constituent's identifier and records the rest as previous identifiers.
+    inherited_by_edit = {}
+    merges_resolved = 0
+    merges_referred = 0
+    for edit_idx, won in won_by_edit.items():
+        if len(won) == 1:
+            inherited_by_edit[edit_idx] = won[0]
+            continue
+        reef_id = resolve_merge(edit_idx, won)
+        inherited_by_edit[edit_idx] = reef_id
+        if reef_id is None:
+            merges_referred += 1
+        else:
+            merges_resolved += 1
+    winners = {reef_id: edit_idx for edit_idx, reef_id in inherited_by_edit.items()
+               if reef_id is not None}
 
     used_prov_ids = set()
+    reef_edit_reeffid = {}
     reef_edit_reefid = {}
     reef_edit_codes_attr = {}
     reef_edit_prevreefid = {}
 
-    # 5a. Move features
-    for edit_idx in move_edits.index:
-        label_id = move_label_ids.get(edit_idx)
-        code = move_codes_map.get(edit_idx)
-        reef_edit_reefid[edit_idx] = label_id
-        reef_edit_codes_attr[edit_idx] = code
-        reef_edit_prevreefid[edit_idx] = None
+    for edit_idx in reef_edit.index:
+        cand_old = [r['old_idx'] for r in candidates_by_edit.get(edit_idx, [])]
+        cand_ids = [c for c in dict.fromkeys(gbr_label.get(i) for i in cand_old)
+                    if pd.notna(c)]
+        codes = [c for c in dict.fromkeys(gbr_code.get(i) for i in cand_old)
+                 if pd.notna(c)]
+        reef_edit_codes_attr[edit_idx] = ';'.join(codes) if codes else None
 
-    # 5b. Overlap features — first pass: determine which LABEL_IDs map 1:1
-    # Count how many new features claim each LABEL_ID
-    label_id_claimants = {}  # label_id -> list of edit_idx
-    for edit_idx in overlap_edits.index:
-        info = overlap_info.get(edit_idx, {'codes': [], 'label_ids': []})
-        unique_labels = list(dict.fromkeys(info['label_ids']))  # deduplicate, preserve order
-        if len(unique_labels) == 1:
-            lid = unique_labels[0]
-            label_id_claimants.setdefault(lid, []).append(edit_idx)
-
-    for edit_idx in overlap_edits.index:
-        info = overlap_info.get(edit_idx, {'codes': [], 'label_ids': []})
-        codes = info['codes']
-        label_ids = info['label_ids']
-        unique_labels = list(dict.fromkeys(label_ids))
-
-        # CODES attribute
-        if codes:
-            reef_edit_codes_attr[edit_idx] = ';'.join(dict.fromkeys(codes))
+        reef_id = inherited_by_edit.get(edit_idx)
+        if reef_id is not None:
+            reef_edit_reefid[edit_idx] = reef_id
+            reef_edit_reeffid[edit_idx] = reef_id
+            previous = [c for c in cand_ids if c != reef_id]
         else:
-            reef_edit_codes_attr[edit_idx] = None
+            centroid = reef_edit.at[edit_idx, 'geometry'].centroid
+            reef_edit_reefid[edit_idx] = None
+            reef_edit_reeffid[edit_idx] = make_provisional_id(centroid, used_prov_ids)
+            previous = cand_ids
+        reef_edit_prevreefid[edit_idx] = ';'.join(previous) if previous else None
 
-        # ReefID and PrevReefID
-        if len(unique_labels) == 1:
-            lid = unique_labels[0]
-            if len(label_id_claimants.get(lid, [])) == 1:
-                # Exactly one new feature claims this LABEL_ID -> use it
-                reef_edit_reefid[edit_idx] = lid
-                reef_edit_prevreefid[edit_idx] = None
-            else:
-                # Multiple new features claim the same LABEL_ID
-                centroid = overlap_edits.at[edit_idx, 'geometry'].centroid
-                reef_edit_reefid[edit_idx] = make_provisional_id(centroid, used_prov_ids)
-                reef_edit_prevreefid[edit_idx] = lid
-        elif len(unique_labels) > 1:
-            # Multiple old LABEL_IDs merged
-            centroid = overlap_edits.at[edit_idx, 'geometry'].centroid
-            reef_edit_reefid[edit_idx] = make_provisional_id(centroid, used_prov_ids)
-            reef_edit_prevreefid[edit_idx] = ';'.join(unique_labels)
-        else:
-            # Genuinely new (no overlap above threshold)
-            centroid = overlap_edits.at[edit_idx, 'geometry'].centroid
-            reef_edit_reefid[edit_idx] = make_provisional_id(centroid, used_prov_ids)
-            reef_edit_prevreefid[edit_idx] = None
-
-    prov_count = sum(1 for v in reef_edit_reefid.values()
-                     if v is not None and str(v).startswith('PROV-'))
-    print(f"  {prov_count} provisional IDs assigned")
-    print(f"  {len(reef_edit_reefid) - prov_count} LABEL_IDs carried forward")
+    inherited = sum(1 for v in reef_edit_reefid.values() if v is not None)
+    with_prev = sum(1 for v in reef_edit_prevreefid.values() if v is not None)
+    genuinely_new = sum(1 for idx in reef_edit.index
+                        if reef_edit_reefid[idx] is None
+                        and reef_edit_prevreefid[idx] is None)
+    merged_features = sum(1 for idx in reef_edit.index
+                          if len(won_by_edit.get(idx, [])) > 1)
+    print(f"  {inherited} new features inherit an official ReefID")
+    print(f"  {len(reef_edit) - inherited} receive a provisional ReefFID")
+    print(f"  {with_prev} record at least one PrevReefID")
+    print(f"  {genuinely_new} are genuinely new (no candidate relationship)")
+    print(f"  {merged_features} features merge several old reefs: "
+          f"{merges_resolved} keep the dominant identifier, "
+          f"{merges_referred} referred to GBRMPA")
+    print(f"  {groups_clear} split groups have a dominant successor, "
+          f"{groups_referred} referred to GBRMPA")
 
     # ------------------------------------------------------------------
-    # Step 6: Prepare retained old features
+    # Step 6: Review outputs
     # ------------------------------------------------------------------
-    print("\nStep 6: Preparing retained old features")
+    print("\nStep 6: Writing review outputs")
+
+    all_delete = gbr_delete_move | gbr_delete_remove | gbr_delete_overlap
+    delete_reason = {}
+    delete_share = {}
+
+    # An overlap deletion is only reported once the reason the same overlap did
+    # not also carry the identifier across is known, since that is what a
+    # reviewer has to act on. The best pair on each old feature decides it.
+    best_pair = {}
+    for (old_idx, _), pair in pairs.items():
+        rank = (pair['survives'], max(pair['share_old'], pair['share_new']))
+        if old_idx not in best_pair or rank > best_pair[old_idx]:
+            best_pair[old_idx] = rank
+    for idx in gbr_delete_overlap:
+        survives, share = best_pair[idx]
+        delete_share[idx] = share
+        delete_reason[idx] = (
+            f'Overlap below threshold {CANDIDATE_SHARE:.2f}' if survives
+            else 'Overlap rejected as sliver')
+    for idx in gbr_delete_remove:
+        delete_reason[idx] = 'Remove point'
+    for idx in gbr_delete_move:
+        delete_reason[idx] = 'Move'
+
+    assigned_ids = set()
+    for value in reef_edit_reefid.values():
+        if value is not None:
+            assigned_ids.add(value)
+    for value in reef_edit_prevreefid.values():
+        if value is not None:
+            assigned_ids.update(value.split(';'))
+
+    if os.path.exists(review_path):
+        os.remove(review_path)
+
+    # 6.1 Orphaned identifiers: deleted old features whose identifier is gone
+    orphan_idx = [i for i in sorted(all_delete)
+                  if pd.notna(gbr_label.get(i)) and gbr_label.get(i) not in assigned_ids]
+    orphans = gbr.loc[orphan_idx, ['LABEL_ID', 'CODE', 'geometry']].copy()
+    orphans = orphans.rename(columns={'LABEL_ID': 'ReefID'})
+    orphans['area_km2'] = [gbr_areas.loc[i] / 1e6 for i in orphan_idx]
+    orphans['max_share'] = [delete_share.get(i) for i in orphan_idx]
+    orphans['reason'] = [delete_reason.get(i) for i in orphan_idx]
+    write_review_layer(orphans, 'orphaned-identifiers')
+
+    # 6.2 Sub-threshold overlaps: survived the sliver test but failed the share test
+    sub_records = [p for key, p in pairs.items()
+                   if p['survives'] and key not in candidates]
+    sub_threshold = gpd.GeoDataFrame(
+        {
+            'ReefID': [gbr_label.get(p['old_idx']) for p in sub_records],
+            'CODE': [gbr_code.get(p['old_idx']) for p in sub_records],
+            'area_old_km2': [gbr_areas.loc[p['old_idx']] / 1e6 for p in sub_records],
+            'area_new_km2': [edit_areas.loc[p['edit_idx']] / 1e6 for p in sub_records],
+            'area_int_km2': [p['area'] / 1e6 for p in sub_records],
+            'share_old': [p['share_old'] for p in sub_records],
+            'share_new': [p['share_new'] for p in sub_records],
+            'sole_pair': [p['old_idx'] not in old_with_candidate for p in sub_records],
+        },
+        geometry=[p['geometry'] for p in sub_records],
+        crs='EPSG:3577',
+    )
+    if len(sub_threshold) > 0:
+        sub_threshold = sub_threshold.to_crs(epsg=4283)
+    write_review_layer(sub_threshold, 'sub-threshold-overlaps')
+
+    # 6.3 Extreme size changes among inherited relationships
+    size_records = []
+    for reef_id, edit_idx in winners.items():
+        old_idx = candidates_by_id[reef_id][edit_idx]['old_idx']
+        old_area = sum(gbr_areas.loc[i] for i in old_idx)
+        new_area = edit_areas.loc[edit_idx]
+        if old_area <= 0 or new_area <= 0:
+            continue
+        ratio = max(old_area / new_area, new_area / old_area)
+        if ratio > SIZE_CHANGE_REPORT:
+            size_records.append((reef_id, edit_idx, old_area, new_area, ratio))
+    size_changes = gpd.GeoDataFrame(
+        {
+            'ReefID': [r[0] for r in size_records],
+            'area_old_km2': [r[2] / 1e6 for r in size_records],
+            'area_new_km2': [r[3] / 1e6 for r in size_records],
+            'area_ratio': [r[4] for r in size_records],
+        },
+        geometry=[reef_edit.geometry.loc[r[1]] for r in size_records],
+        crs='EPSG:4283',
+    )
+    write_review_layer(size_changes, 'extreme-size-changes')
+
+    # 6.4 Override points that are obsolete or no longer needed
+    overrides = gpd.GeoDataFrame(
+        {
+            'ACTION': [p[1] for p in override_problems],
+            'ReefID': [p[2] for p in override_problems],
+            'reason': [p[3] for p in override_problems],
+        },
+        geometry=[remove_move.geometry.loc[p[0]] for p in override_problems],
+        crs='EPSG:4283',
+    )
+    write_review_layer(overrides, 'override-problems')
+
+    # 6.5 Old features surviving inside the comprehensively remapped inshore area
+    inshore = gpd.read_file(inshore_extent_path).to_crs(epsg=4283)
+    inshore_union = unary_union(inshore.geometry)
+    survivors = sorted(set(gbr.index[~filter_mask]) - all_delete)
+    gap_idx = [i for i in survivors
+               if gbr.geometry.loc[i].intersects(inshore_union)]
+    gaps = gbr.loc[gap_idx, ['LABEL_ID', 'CODE', 'FEAT_NAME', 'geometry']].copy()
+    gaps = gaps.rename(columns={'LABEL_ID': 'ReefID'})
+    gaps['area_km2'] = [gbr_areas.loc[i] / 1e6 for i in gap_idx]
+    write_review_layer(gaps, 'inshore-gaps')
+
+    print(f"  Review layers written to {review_path}")
+
+    # ------------------------------------------------------------------
+    # Step 7: Apply deletions and the Island/Mainland/Other filter
+    # ------------------------------------------------------------------
+    print("\nStep 7: Applying deletions and filtering Island/Mainland/Other")
+    drop_indices = set(gbr.index[filter_mask]) | all_delete
+    original_count = len(gbr)
+    gbr = gbr.drop(index=drop_indices).reset_index(drop=True)
+    print(f"  Removed {original_count - len(gbr)} features "
+          f"({len(all_delete)} move/remove/overlap, rest Island/Mainland/Other), "
+          f"{len(gbr)} remaining")
+
+    # ------------------------------------------------------------------
+    # Step 8: Prepare retained old features
+    # ------------------------------------------------------------------
+    print("\nStep 8: Preparing retained old features")
     print(f"  {len(gbr)} GBR features retained")
 
-    # 6.1 Crosswalk
+    # 8.1 Crosswalk
     print("  Applying classification crosswalk")
     unmapped = []
     rbtype_values = []
@@ -466,7 +835,7 @@ def main():
     gbr['RB_Type_L3'] = rbtype_values
     gbr['OrigType'] = origtype_values
 
-    # 6.2 Attachment
+    # 8.2 Attachment
     print("  Computing Attachment (island/mainland buffer)")
     gbr_3577 = gbr.to_crs(epsg=3577)
     islands_mainland_3577 = islands_mainland.to_crs(epsg=3577)
@@ -484,39 +853,40 @@ def main():
     cay_mask = gbr['RB_Type_L3'] == 'Unvegetated Cay'
     gbr.loc[cay_mask, 'Attachment'] = 'Land'
 
-    # 6.3 EdgeAcc_m
+    # 8.3 EdgeAcc_m
     print("  Computing EdgeAcc_m from area")
     areas_km2 = gbr_3577.geometry.area / 1e6
     gbr['EdgeAcc_m'] = [compute_edge_acc(a) for a in areas_km2]
 
-    # 6.4 Other defaults
+    # 8.4 Other defaults
     gbr['FeatConf'] = None
-    gbr['TypeConf'] = gbr.get('CLASS_CONF', pd.Series(dtype='object'))
+    gbr['TypeConf'] = gbr.get('CLASS_CONF', pd.Series(dtype='object')).replace(
+        {'LowHigh': 'Low'})
     gbr['DepthCat'] = None
     gbr['DepthCatSr'] = None
 
-    # 6.5 Rename
+    # 8.5 Rename
     rename_map = {'IMG_SRC': 'EdgeSrc', 'LABEL_ID': 'ReefID'}
     gbr = gbr.rename(columns={k: v for k, v in rename_map.items() if k in gbr.columns})
+    gbr['ReefFID'] = gbr['ReefID']
 
-    # 6.6 Dataset — retain original
+    # 8.6 Dataset — retain original
     if 'DATASET' in gbr.columns:
         gbr = gbr.rename(columns={'DATASET': 'Dataset'})
 
-    # 6.7 CODES and PrevReefID
+    # 8.7 CODES and PrevReefID
     gbr['CODES'] = gbr['CODE'] if 'CODE' in gbr.columns else None
     gbr['PrevReefID'] = None
 
     # ------------------------------------------------------------------
-    # Step 7: Prepare new features (Reef Edit)
+    # Step 9: Prepare new features (Reef Edit)
     # ------------------------------------------------------------------
-    print("\nStep 7: Preparing Reef Edit features")
+    print("\nStep 9: Preparing Reef Edit features")
 
-    # Recombine move_edits and overlap_edits
-    new_features = pd.concat([move_edits, overlap_edits], ignore_index=False)
-    new_features = new_features.copy()
+    new_features = reef_edit.copy()
 
     # Assign computed attributes
+    new_features['ReefFID'] = new_features.index.map(reef_edit_reeffid)
     new_features['ReefID'] = new_features.index.map(reef_edit_reefid)
     new_features['CODES'] = new_features.index.map(reef_edit_codes_attr)
     new_features['PrevReefID'] = new_features.index.map(reef_edit_prevreefid)
@@ -544,15 +914,15 @@ def main():
     print(f"  {len(new_features)} new features prepared")
 
     # ------------------------------------------------------------------
-    # Step 8: Merge and output
+    # Step 10: Merge and output
     # ------------------------------------------------------------------
-    print("\nStep 8: Merging and saving output")
+    print("\nStep 10: Merging and saving output")
 
     # Trim old features to output schema
     output_columns = [
         'RB_Type_L3', 'Attachment', 'DepthCat', 'DepthCatSr',
         'FeatConf', 'TypeConf', 'EdgeSrc', 'EdgeAcc_m',
-        'OrigType', 'Dataset', 'ReefID', 'CODES', 'PrevReefID', 'geometry'
+        'OrigType', 'Dataset', 'ReefFID', 'ReefID', 'CODES', 'PrevReefID', 'geometry'
     ]
 
     # Keep only output columns that exist (others are discarded)
@@ -569,6 +939,19 @@ def main():
 
     merged = gpd.GeoDataFrame(pd.concat([gbr_out, new_out], ignore_index=True))
     merged = merged.set_crs(epsg=4283)
+
+    # An official identifier should be held by one feature only. The allocation
+    # rules guarantee this among the new features, but LABEL_ID is not unique in
+    # the source, so a retained old polygon can still share an identifier with
+    # another retained polygon or with a new feature. Stage 03 resolves these
+    # with -Fnn suffixes, so they are reported rather than treated as an error.
+    held = merged.loc[merged['ReefID'].notna(), 'ReefID']
+    duplicated = sorted(held[held.duplicated()].unique())
+    if duplicated:
+        print(f"  NOTE: {len(duplicated)} official ReefID values are shared by more "
+              f"than one feature (source LABEL_ID is not unique)")
+        share_mask = merged['ReefID'].isin(duplicated)
+        write_review_layer(merged[share_mask].sort_values('ReefID'), 'shared-reefid')
 
     print(f"  Saving {len(merged)} features to {output_path}")
     merged.to_file(output_path)

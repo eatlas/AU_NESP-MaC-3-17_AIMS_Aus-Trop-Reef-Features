@@ -7,7 +7,10 @@ Patches the Coral Sea Features shapefile by:
 3. Rounding AvArea_km2 to 6 decimal places
 4. Creating an attribute 'OrigType' with values from 'RB_Type_L3'
 5. Converting the Atoll Platforms dataset into features by removing areas overlapping with reefs (i.e., cutting out reefs from platforms, leaving non-overlapping platform features)
-6. Translating RB_Type_L3 from v0-3 to v0-4 using a crosswalk table after merging
+6. Translating Coral Sea RB_Type_L3 from v0-3 to v0-4 using CS_RB_Type_L3_v0-3 in the crosswalk table after merging
+7. Standardising 'Very high' and 'High' to 'High' in FeatConf and TypeConf
+
+See 02c-patch-CS-Features-spec.md for inputs, processing and outputs.
 """
 
 import os
@@ -44,6 +47,12 @@ def process_features(gdf, dataset_name):
     print(f"Processing {dataset_name}...")
     print(f"Input dataset: {len(gdf)} features")
     print(f"Original columns: {list(gdf.columns)}")
+
+    for field in ('FeatConf', 'TypeConf'):
+        if field in gdf.columns:
+            changed = int(gdf[field].eq('Very high').sum())
+            gdf[field] = gdf[field].replace({'Very high': 'High', 'High': 'High'})
+            print(f"  {field}: standardised {changed} 'Very high' values to 'High'")
     
     # Add 'DATASET' attribute
     gdf['Dataset'] = 'CS Features'
@@ -74,17 +83,20 @@ def process_features(gdf, dataset_name):
 
 def load_rb_type_crosswalk(csv_path):
     """
-    Loads the RB_Type_L3 crosswalk table and returns a mapping from v0-3 to v0-4.
+    Map CS_RB_Type_L3_v0-3 to RB_Type_L3_v0-4, excluding blank source cells.
+
+    Coral Sea Atoll Platform excludes separately mapped reefs and maps to
+    Oceanic Platform (Sediment at L2), unlike the NW v0-3 classification.
     """
     print(f"Loading RB_Type_L3 crosswalk from {csv_path}")
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv(csv_path, dtype=str).fillna('')
     lut = {}
     for _, row in df.iterrows():
-        k = str(row['RB_Type_L3_v0-3']).strip()
+        k = str(row['CS_RB_Type_L3_v0-3']).strip()
         v = str(row['RB_Type_L3_v0-4']).strip()
         if k:
             lut[k] = v
-    print(f"Loaded {len(lut)} RB_Type_L3 v0-3 to v0-4 mappings")
+    print(f"Loaded {len(lut)} CS_RB_Type_L3_v0-3 to RB_Type_L3_v0-4 mappings")
     return lut
 
 def main():
@@ -124,6 +136,10 @@ def main():
     # Merge the two geodataframes
     print("Merging datasets...")
     merged_gdf = gpd.GeoDataFrame(pd.concat([cs_reefs_gdf, cs_platforms_gdf], ignore_index=True))
+
+    # Preserve published feature IDs on updates; stage 03 performs first allocation.
+    if 'ReefFID' not in merged_gdf.columns:
+        merged_gdf['ReefFID'] = None
     
     print(f"Final dataset: {len(merged_gdf)} features")
     print(f"Final columns: {list(merged_gdf.columns)}")
@@ -131,7 +147,7 @@ def main():
     # --- RB_Type_L3 v0-3 to v0-4 translation step ---
     rb_type_lut = load_rb_type_crosswalk(rb_type_lut_path)
 
-    print("Translating RB_Type_L3 from v0-3 to v0-4 using crosswalk table...")
+    print("Translating RB_Type_L3 using CS_RB_Type_L3_v0-3 to RB_Type_L3_v0-4 crosswalk...")
     if 'RB_Type_L3' not in merged_gdf.columns:
         raise Exception("RB_Type_L3 column not found in merged dataset.")
 

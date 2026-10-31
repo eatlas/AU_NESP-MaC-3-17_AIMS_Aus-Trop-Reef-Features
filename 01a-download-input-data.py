@@ -14,6 +14,9 @@ import zipfile
 import csv
 import time
 import configparser
+import shutil
+import tempfile
+from pathlib import Path
 from urllib.parse import urlparse
 from pyproj import CRS  # Add this import for the CRS class
 
@@ -41,6 +44,34 @@ def replace_prj_with_epsg_4283(shapefile_path):
     with open(prj_file, "w") as f:
         f.write(wkt_content)
     print(".prj file successfully replaced!")
+
+
+def download_imcra():
+    """Shorten IMCRA filenames before moving them to the long project path."""
+    dataset = 'IMCRA-v4-0-Meso-Bioregions'
+    short_stem = 'IMCRA-v4-Mesoscale-Bioregions'
+    long_stem = 'Integrated_Marine_and_Coastal_Regionalisation_of_Australia_(IMCRA)_v4.0_-_Meso-scale_Bioregions'
+    destination = Path(download_path) / dataset
+    required = ('.shp', '.shx', '.dbf', '.prj')
+    if destination.exists():
+        if not all((destination / f'{short_stem}{suffix}').exists() for suffix in required):
+            raise FileNotFoundError(f'Incomplete IMCRA dataset: {destination}')
+        print(f'Skipping existing IMCRA dataset: {destination}')
+        return
+    with tempfile.TemporaryDirectory() as temporary:
+        regional_downloader = DataDownloader(download_path=temporary)
+        regional_downloader.download_and_unzip(
+            'https://hub.arcgis.com/api/v3/datasets/7f83e6e00406487d88d52ac4c2d8c8d4_0/downloads/data?format=shp&spatialRefId=4283&where=1%3D1',
+            dataset, flatten_directory=True
+        )
+        extracted = Path(temporary) / dataset
+        for path in extracted.glob(f'{long_stem}.*'):
+            path.rename(path.with_name(path.name.replace(long_stem, short_stem, 1)))
+        if not all((extracted / f'{short_stem}{suffix}').exists() for suffix in required):
+            raise FileNotFoundError(f'Expected IMCRA shapefile components not found in {extracted}')
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(extracted), str(destination))
+        print(f'Saved IMCRA dataset: {destination}')
 
 # The dataset names in the data/in are kept short to prevent long paths causing issues in Windows.
 # --------------------------------------------------------
@@ -89,6 +120,30 @@ downloader.download_and_unzip(direct_download_url, f'CS-Feat_{cs_feat_version}',
 
 direct_download_url = f'https://nextcloud.eatlas.org.au/s/ZbxtYci3A6WYnHc/download?path=%2F{nw_aus_feat_version}'
 downloader.download_and_unzip(direct_download_url, f'NW-Aus-Feat_{nw_aus_feat_version}', flatten_directory=True)
+
+
+# REGIONALISATIONS FOR A05
+# These use the same sources and extraction names as NW-Aus-Features A05.
+# DCCEEW (2025), CAPAD 2024 - Marine, Commonwealth of Australia 2025.
+# https://fed.dcceew.gov.au/datasets/erin::collaborative-australian-protected-areas-database-capad-2024-marine/about
+downloader.download_and_unzip(
+    'https://hub.arcgis.com/api/v3/datasets/0b6e7b6c48a64a3a82c225fa48aee13d_1/downloads/data?format=shp&spatialRefId=4283&where=1%3D1',
+    'CAPAD-2024',
+    flatten_directory=True
+)
+
+# Lawrey, E. (2025). Supporting datasets for estimating reef counts in the
+# Coral Sea and northern Australia (NESP MaC 3.17, AIMS), Version 1.
+# https://doi.org/10.26274/xr0r-tb19
+downloader.download_and_unzip(
+    'https://nextcloud.eatlas.org.au/s/HmSS5bxxgKdDxEP/download?path=%2Fv1%2Fin%2Fanalysis-regions',
+    'nesp-3-17-analysis-regions',
+    flatten_directory=True
+)
+
+# DCCEEW (2023). IMCRA v4.0 - Meso-scale Bioregions. CC BY 3.0.
+# https://fed.dcceew.gov.au/datasets/erin::integrated-marine-and-coastal-regionalisation-of-australia-imcra-v4-0-meso-scale-bioregions/about
+download_imcra()
 
 
 # BATHYMETRY DATASETS

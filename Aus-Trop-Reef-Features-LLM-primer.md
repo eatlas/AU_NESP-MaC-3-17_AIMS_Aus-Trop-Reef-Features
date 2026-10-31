@@ -122,6 +122,8 @@ Depth classes come from source datasets where available. Where missing they are 
 
 ## Reproducibility in brief
 
+Area calculation update for v1-0 (2026-10-29): stage 06 and A01 now use GDA94 / Australian Albers (EPSG:3577), an equal-area projection. EPSG:3112 is conformal rather than equal-area. References to EPSG 3112 elsewhere in this primer describe the earlier workflow and v0-1 output, not the corrected v1-0 calculations. Stage 06 stores corrected areas rounded to four decimal places in km².
+
 The build is fully scripted. Script 01 downloads inputs. Scripts 02a to 02c standardise and patch regional sources. Script 03 merges the standardised layers. Script 04 assigns sovereignty. Script 05 derives DEM statistics and fills missing depth classes. Script 06 applies the NVCL and Seamap cross-walks, recomputes area in EPSG 3112 and compacts text fields. Manual edits to the GBR composite are applied via dedicated override and extra features shapefiles, preserving full auditability.
 
 ## Known limitations in v0-1 that affect analysis
@@ -256,5 +258,4 @@ This dataset is made available under a creative commons attribution 4.0 internat
 ---
 
 If an analysis requires definitions, full enumerations, region specific caveats, or the exact logic used in overrides and cross-walks, the agent should direct the user to the full repository README, the dataset metadata record and the Reef Boundary Type classification document.
-
 

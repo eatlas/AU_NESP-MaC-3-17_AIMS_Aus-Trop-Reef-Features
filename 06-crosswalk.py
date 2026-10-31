@@ -25,7 +25,7 @@ Processing Steps:
         - Adds selected external classification attributes from the crosswalk table.
         - Retains key existing attributes from the input shapefile.
         - Converts the EdgeAcc_m attribute to integer type.
-        - Recalculates the Area_km2 attribute using an equal-area projection (EPSG:3112).
+        - Recalculates Area_km2 using GDA94 / Australian Albers (EPSG:3577), an equal-area projection.
         - Reprojects the final dataset to EPSG:4283 (GDA94) for publication.
         - Determines the maximum string length for each output text field and sets the output schema accordingly.
         - Saves the enriched dataset as a new shapefile.
@@ -74,7 +74,7 @@ CROSSWALK_FIELDS = [
 # Existing fields to retain
 RETAIN_FIELDS = [
     'RB_Type_L3','Attachment', 'DepthCat','DepthCatSr', 'FeatConf', 'TypeConf', 
-     'EdgeSrc', 'EdgeAcc_m', 'ReefID', 'Dataset', 'OrigType', 'Sovereign1', 'Sovereign2', 
+    'EdgeSrc', 'EdgeAcc_m', 'ReefFID', 'ReefID', 'PrevReefID', 'Dataset', 'OrigType', 'Sovereign1', 'Sovereign2', 
      'Sov1_Perc', 'Sov2_Perc', 'Union', 'DEM10p', 'DEM50p', 'DEM90p', 'DEMSr'
 ]
 
@@ -137,9 +137,9 @@ def main():
         matched_gdf[field] = crosswalk_matched[field].values
 
     # Recalculate Area_km2
-    print("Reprojecting to EPSG:3112 for area calculation...")
-    matched_gdf_3112 = matched_gdf.to_crs(epsg=3112)
-    matched_gdf['Area_km2'] = matched_gdf_3112.geometry.area / 1e6
+    print("Reprojecting to EPSG:3577 (GDA94 / Australian Albers) for equal-area calculation...")
+    matched_gdf_3577 = matched_gdf.to_crs(epsg=3577)
+    matched_gdf['Area_km2'] = matched_gdf_3577.geometry.area / 1e6
     matched_gdf['Area_km2'] = matched_gdf['Area_km2'].round(4)
 
     # Reproject to EPSG:4283 for output

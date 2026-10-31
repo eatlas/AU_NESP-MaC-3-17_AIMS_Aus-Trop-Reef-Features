@@ -1,9 +1,15 @@
 """
-Australian Tropical Reef Feature Patching Script
-===============================================
+LEGACY ONLY: Australian Tropical Reef Feature Patching Script (v0-1)
+==================================================================
 
-This script was used for v0-1 of the Australian Tropical Reef Features dataset. For this 
-version was made a series of quick corrections to the original TS-GBR-Features dataset.
+Retained for historical reference to v0-1, not for the current workflow.
+For v0-9 onwards, including v1-0, run 01d-refresh-TS-GBR-Features.py followed by
+02a-patch-TS-GBR-Features.py instead.
+WARNING: This legacy script writes to the same intermediate output path as
+the current script and can overwrite its patched layer if run successfully.
+
+This script was used for v0-1 of the Australian Tropical Reef Features dataset.
+For that version we made a series of quick corrections to the original TS-GBR-Features dataset.
 We used a point shapefile to indicate classification changes (Bank, Rock) and features to be 
 removed or replaced (Move, Reshape, Merge, Remove). This was quick, but had the limitation of
 not facilitating the setting of all the reef attributes, such as the uncertainty attributes, 

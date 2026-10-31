@@ -7,7 +7,25 @@ superset of the attributes from the input shapefiles.
 
 import os
 import geopandas as gpd
+import pandas as pd
 from crosswalk_utils import load_crosswalk, validate_features
+from reeffid_utils import allocate_reeffids
+
+# Wrapper applied to ReefLabel when the label comes from PrevReefID rather than
+# ReefID. Set to '{ids}' to show former identifiers without any marking.
+PREV_LABEL_FORMAT = '[{ids}]'
+
+
+def build_reef_label(reef_id, prev_reef_id):
+    """Return the identifier to display on a map, or None where there is none."""
+    if pd.notna(reef_id) and str(reef_id).strip():
+        return str(reef_id).strip()
+    if pd.notna(prev_reef_id) and str(prev_reef_id).strip():
+        ids = [part.strip() for part in str(prev_reef_id).split(';') if part.strip()]
+        if ids:
+            return PREV_LABEL_FORMAT.format(ids='; '.join(ids))
+    return None
+
 
 def main():
 
@@ -59,6 +77,25 @@ def main():
     # Concatenate the GeoDataFrames
     print("Merging shapefiles...")
     merged_gdf = gpd.pd.concat([cs_gdf, ts_gbr_gdf, nw_aus_gdf], ignore_index=True)
+
+    unresolved_mask = (
+        merged_gdf['ReefFID'].isna()
+        | merged_gdf['ReefFID'].duplicated(keep=False)
+    )
+    unresolved_count = int(unresolved_mask.sum())
+    print(f"Allocating ReefFID values ({unresolved_count} unresolved records)...")
+    merged_gdf = allocate_reeffids(merged_gdf)
+    print(f"  All {len(merged_gdf)} ReefFID values are non-null and unique")
+
+    merged_gdf['ReefLabel'] = [
+        build_reef_label(reef_id, prev)
+        for reef_id, prev in zip(merged_gdf['ReefID'], merged_gdf['PrevReefID'])
+    ]
+    labelled = merged_gdf['ReefLabel'].notna()
+    from_prev = labelled & merged_gdf['ReefID'].isna()
+    print(f"Building ReefLabel: {int(labelled.sum())} features labelled "
+          f"({int(from_prev.sum())} from PrevReefID), "
+          f"{int((~labelled).sum())} left blank")
 
     # Debug: Print CRS of merged_gdf before setting CRS
     print(f"Merged GeoDataFrame CRS before set_crs: {merged_gdf.crs}")

@@ -14,7 +14,7 @@ Details:
     - Uses a fixed random seed for reproducibility.
 
 Inputs:
-    - working/06/TS-GBR-CS-NW-Features_{version}.shp
+    - data/{version}/out/full-classes/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_{version}.shp
 
 Outputs:
     - working/07/TS-GBR-CS-NW-Features_{version}_subset.csv
@@ -37,7 +37,7 @@ config.read('config.ini')
 version = config.get('general', 'version')
 
 # Input and output paths
-input_shp = f'data/{version}/out/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_{version}.shp'
+input_shp = f'data/{version}/out/full-classes/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_{version}.shp'
 output_csv = f"working/07/TS-GBR-CS-NW-Features_{version}_subset.csv"
 
 def main():
