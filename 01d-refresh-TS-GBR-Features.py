@@ -6,7 +6,7 @@ GBR Features records are replaced with the latest GBRMPA source, excluding the
 99-* records that overlap the remapped Torres Strait coverage. Both 99-000
 mainland-associated records are retained.
 
-Output: working/01/TS-GBR-Features-latest.shp
+Output: working/{version}/01/TS-GBR-Features-latest.shp
 """
 
 import configparser
@@ -35,7 +35,7 @@ latest_gbr_path = os.path.join(
     "GBRMPA-GBR-Features",
     "Great_Barrier_Reef_Features.shp",
 )
-output_dir = os.path.join("working", "01")
+output_dir = os.path.join("working", version, "01")
 output_path = os.path.join(output_dir, "TS-GBR-Features-latest.shp")
 
 

@@ -2,7 +2,7 @@
 
 ## Status and purpose
 
-This specification records the approach agreed on 30 October 2026 and revised on 31 October 2026. The proposed script is `02d-clip-TS-GBR-legacy.py`. It has not yet been implemented.
+This specification records the approach agreed on 30 October 2026 and revised on 31 October 2026. The proposed script is `02d-clip-TS-GBR-legacy.py`. It was implemented on 31 October 2026.
 
 This stage runs after [02a-patch-TS-GBR-Features.py](02a-patch-TS-GBR-Features.py), when replacements and removals have determined which legacy features remain. It clips those surviving features to the coastline. A clipped feature that remains one polygon continues with its existing identifiers. A feature that splits must be corrected manually through Reef Edit before processing can continue.
 
@@ -40,16 +40,17 @@ Both stages will use the shared coastline-preparation and single-Polygon clippin
 
 ## Inputs and outputs
 
-Run from the repository root in the AusTropReef environment. Read `in_3p_path` and `version` from [config.ini](config.ini).
+Run from the repository root in the AusTropReef environment. Read `in_path`, `in_3p_path` and `version` from [config.ini](config.ini).
 
 | Resource | Path |
 |---|---|
-| Patched TS and GBR features | `working/02/TS-GBR-Features-patched.shp` |
+| Patched TS and GBR features | `working/{version}/02/TS-GBR-Features-patched.shp` |
 | Coastline landmask | `{in_3p_path}/Coastline50k/Split/AU_NESP-MaC-3-17_AIMS_Aus-Coastline-50k_2024_V1-1_split.shp` |
-| Accepted input for stage 03 | `working/02/TS-GBR-Features-clipped.shp` |
-| Original split parents | `working/02/legacy-land-split-parents.shp` |
-| Clipped split parts | `working/02/legacy-land-splits.shp` |
-| Original features with no retained marine remainder | `working/02/legacy-land-removed.shp` |
+| Required pier exclusions | `{in_path}/Land-exclusion/Land-exclusion-piers.shp` |
+| Accepted input for stage 03 | `working/{version}/02/TS-GBR-Features-clipped.shp` |
+| Original split parents | `working/{version}/02/legacy-land-split-parents.shp` |
+| Clipped split parts | `working/{version}/02/legacy-land-splits.shp` |
+| Original features with no retained marine remainder | `working/{version}/02/legacy-land-removed.shp` |
 
 The primary output retains the stage 02a schema, including the intermediate `RE_row` and `RE_part` tracking fields, and EPSG:4283. These fields are null for legacy records. Source datasets and the stage 02a output remain unchanged. QA tracking fields are not added to the primary output.
 
@@ -58,6 +59,8 @@ The primary output retains the stage 02a schema, including the intermediate `RE_
 Select retained legacy records using `Dataset = GBR Features` or `Dataset = TS Features`. Recognise the current editing source as `Aus-Trop-Reef-Features_{version}`. Missing or unexpected source labels cause an error rather than silently choosing a processing path. Print any unexpected labels. No separate version-mismatch detection is required.
 
 Only retained legacy marine records receive land subtraction here. Carry the edited records through unchanged; they have already been clipped and allocated identifiers upstream.
+
+Use the same required pier-exclusion layer as stage 01e. Subtract its validated EPSG:4283 polygons from the working coastline mask before building the spatial index, following the [shared exclusion rules](01e-clip-TS-GBR-reef-edit-spec.md#geometry-processing). This preserves reef continuity beneath manually assessed elevated piers without exempting an entire reef from coastline clipping. The source coastline and exclusion layer remain unchanged. Missing or invalid exclusions and failed exclusion operations block publication. A valid empty layer with a defined CRS represents no exclusions. Report the exclusion count and changed coastline-record count. Rerun stages 01e, 02a and 02d after changing the exclusions.
 
 Exempt cay records in either source group. After stage 02a, cays are identified by `RB_Type_L3` values `Vegetated Cay` and `Unvegetated Cay`. For legacy records these classes are produced by the stage 02a crosswalk from the source classification `FEAT_NAME = 'Cay'`, which is not retained in the stage 02a output.
 
@@ -115,9 +118,9 @@ Rebuild this stage's outputs on every run. Remove stale QA datasets owned by the
 
 This stage is run in an editing loop with its QA layers open in QGIS, so locked files are expected. If an owned output or sidecar cannot be deleted or written, stop with a nonzero exit status. Print the affected path and a message such as "This file is probably open in QGIS or another program. Remove the layer or close the project, then rerun." Do not report this as a generic exception trace.
 
-Change [03-merge-TS-GBR-CS-NW.py](03-merge-TS-GBR-CS-NW.py) to read `working/02/TS-GBR-Features-clipped.shp` by default, never automatically falling back to the raw stage 02a output. Stage 03 must drop the `RE_row` and `RE_part` tracking fields. The prescribed production workflow must stop on a failed stage 02d. Stage 03 continues to resolve national `ReefFID` uniqueness but does not allocate lineage to legacy clipping splits.
+Change [03-merge-TS-GBR-CS-NW.py](03-merge-TS-GBR-CS-NW.py) to read `working/{version}/02/TS-GBR-Features-clipped.shp` by default, never automatically falling back to the raw stage 02a output. Stage 03 must drop the `RE_row` and `RE_part` tracking fields. The prescribed production workflow must stop on a failed stage 02d. Stage 03 continues to resolve national `ReefFID` uniqueness but does not allocate lineage to legacy clipping splits.
 
-For development while manual corrections are in progress, provide an explicit `--allow-review` option in stage 03. This reads the raw stage 02a output instead of the accepted clipped path and writes all stage 03 outputs to `working/03-review`, not the production directory. Print a conspicuous warning that legacy coastline correction has been bypassed and the output is not for publication. This mode tests the merge without inventing assignments for clipped legacy pieces. It does not override stage 02d, imply acceptance of legacy cases or change the normal downstream inputs. It must not write to the production output directory. No automatic fallback or review-mode pipeline is required.
+For development while manual corrections are in progress, provide an explicit `--allow-review` option in stage 03. This reads the raw stage 02a output instead of the accepted clipped path and writes all stage 03 outputs to `working/{version}/03-review`, not the production directory. Print a conspicuous warning that legacy coastline correction has been bypassed and the output is not for publication. This mode tests the merge without inventing assignments for clipped legacy pieces. It does not override stage 02d, imply acceptance of legacy cases or change the normal downstream inputs. It must not write to the production output directory. No automatic fallback or review-mode pipeline is required.
 
 Rerun stage 02d whenever stage 02a is regenerated. Rerun both clipping stages and stage 02a whenever the coastline changes. Intermediates are not self-refreshing caches; skipping required upstream reruns is not supported. This specification does not introduce a general pipeline scheduler or cache-fingerprint system.
 

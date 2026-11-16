@@ -109,7 +109,9 @@ Depth sources include Sentinel-2 visibility thresholds in Red (B4), Green (B3) a
 
 ### Confidence and positional accuracy
 
-Two categorical confidences support quality assessment. FeatConf is the likelihood the feature exists rather than being artefact or benthic noise, and TypeConf is the likelihood the RB_Type_L3 allocation is correct. Categories are Very Low, Low, Medium and High with approximate probability bands: about >40 percent for Very Low FeatConf through to about 95 percent for High FeatConf, and <50 percent to 90 - 98 percent for TypeConf High depending on texture visibility and distinctiveness. EdgeAcc_m is the mapper’s estimate of the 80th percentile boundary error in metres, considering image noise, turbidity, slope, complexity and atypicality; larger features tend to carry larger EdgeAcc_m due to longer uncertain perimeters. 
+FeatConf records expert confidence that a feature exists rather than being an image anomaly or benthic noise. High means almost certainly real; Medium means highly likely to be real but with less supporting evidence. Low indicates poor evidence for an interpreted feature, while Very Low identifies a highly uncertain candidate. TypeConf separately records confidence in the assigned RB_Type_L3. High means the type is strongly supported. Very Low means the choice between plausible types is little better than a coin flip, commonly between coral and rocky reef. These categories are interpretation judgements, not independently calibrated probability bands. Missing confidence means no assessment was recorded.
+
+For newly interpreted national mapping, EdgeAcc_m estimates the range of plausible boundary positions at the least clear part of the perimeter. It reflects feature size, depth, water clarity, complexity and atypicality. It is not a measured error or a statistically calibrated percentile. Check attribute provenance: retained GBR and Torres Strait features have area-based EdgeAcc_m defaults and blank FeatConf. GBR TypeConf is blank, while Torres Strait values are inherited from CLASS_CONF.
 
 ### EdgeSrc
 

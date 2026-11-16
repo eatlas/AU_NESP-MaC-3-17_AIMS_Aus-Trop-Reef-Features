@@ -2,7 +2,7 @@
 
 ## Status and purpose
 
-This specification records the approach agreed on 30 October 2026 and revised on 31 October 2026. The proposed script is `01e-clip-TS-GBR-reef-edit.py`. It has not yet been implemented.
+This specification records the approach agreed on 30 October 2026 and revised on 31 October 2026. The proposed script is `01e-clip-TS-GBR-reef-edit.py`. It was implemented on 31 October 2026.
 
 Manually digitised marine features may extend over land because their landward boundaries were drawn approximately to reduce editing effort. This stage removes those overhangs before [02a-patch-TS-GBR-Features.py](02a-patch-TS-GBR-Features.py) assigns historic identifiers. The L3 dataset requires one polygon per feature record. Disconnected marine parts must therefore enter stage 02a as separate records rather than inherit identifiers from a multipart parent after allocation.
 
@@ -40,10 +40,11 @@ Run from the repository root in the AusTropReef environment. Read `in_path`, `in
 |---|---|
 | Reef Edit source | `{in_path}/Reef-edit/AIMS_GBR-TS-Features_Edit_{version}.shp` |
 | Coastline landmask | `{in_3p_path}/Coastline50k/Split/AU_NESP-MaC-3-17_AIMS_Aus-Coastline-50k_2024_V1-1_split.shp` |
-| Clipped editing input for stage 02a | `working/01/Reef-Edit-clipped.shp` |
-| Split original parents | `working/01/reef-edit-land-split-parents.shp` |
-| Split output parts | `working/01/reef-edit-land-splits.shp` |
-| Original features with no retained marine remainder | `working/01/reef-edit-land-removed.shp` |
+| Required pier exclusions | `{in_path}/Land-exclusion/Land-exclusion-piers.shp` |
+| Clipped editing input for stage 02a | `working/{version}/01/Reef-Edit-clipped.shp` |
+| Split original parents | `working/{version}/01/reef-edit-land-split-parents.shp` |
+| Split output parts | `working/{version}/01/reef-edit-land-splits.shp` |
+| Original features with no retained marine remainder | `working/{version}/01/reef-edit-land-removed.shp` |
 
 Source datasets are read-only. On 31 October 2026 the Reef Edit source was in EPSG:4326 and contained 4,604 Polygon and 3 MultiPolygon records. The Coastline50k landmask is also in EPSG:4326 and represents approximately mean high water.
 
@@ -58,13 +59,17 @@ The outputs of stages 01e and 02a are intermediate products, so they may carry t
 | `RE_row` | 1-based record number in source-file read order for this run. It is independent of QGIS table sorting and is not a QGIS feature ID. |
 | `RE_part` | 1-based number of the surviving output part within that source record. It is 1 for unsplit features and null for original-parent or complete-removal QA records. |
 
-These are run-specific references, not persistent identifiers. Stage 02a must retain them on editing records in `working/02/TS-GBR-Features-patched.shp`. Legacy records leave them null. Stage 02a error messages and identifier review layers do not need these references and remain unchanged. No new relationship table is required. [03-merge-TS-GBR-CS-NW.py](03-merge-TS-GBR-CS-NW.py) must drop the two fields so they never reach the published dataset.
+These are run-specific references, not persistent identifiers. Stage 02a must retain them on editing records in `working/{version}/02/TS-GBR-Features-patched.shp`. Legacy records leave them null. Stage 02a error messages and identifier review layers do not need these references and remain unchanged. No new relationship table is required. [03-merge-TS-GBR-CS-NW.py](03-merge-TS-GBR-CS-NW.py) must drop the two fields so they never reach the published dataset.
 
 ## Geometry processing
 
 Require defined CRS, valid non-empty polygon geometry and the fields listed above. Report invalid, null or non-polygon input records for correction rather than dropping or repairing them automatically. Treat a MultiPolygon with one component as a Polygon. Stop on source records with two or more components and print their `RE_row` references. The source snapshot contains only three MultiPolygon records. Any genuinely multipart records should be separated manually in QGIS into individually attributed Reef Edit records before rerunning. This avoids per-component clipping and tracking rules for a small source-cleanup task. The singlepart requirement applies to exempt cays as well as marine features, but not to the coastline landmask.
 
 Transform the coastline and Reef Edit geometries to EPSG:4283 at the start and validate them after transformation. Build the coastline spatial index only after this transformation. All spatial-index queries, local coastline unions and subtraction operations use EPSG:4283. Features with no intersecting land keep their EPSG:4283 geometry without a difference operation. Otherwise union only the intersecting land polygons, validate the union, subtract it and validate the result. If the valid result is topologically equal to the input, retain the input geometry and do not apply the fragment filter. This also handles boundary-only contact without a separate contact predicate. There is no vertex-count or coordinate-order requirement. Do not buffer, simplify or fill holes.
+
+Before building the coastline index, subtract the required pier-exclusion polygons from the working landmask. These manually assessed footprints describe elevated piers beneath which the reef continues. They are local clipping exceptions, not exemptions for an entire reef or corrections to the published coastline. Require a defined CRS and valid, non-empty Polygon or MultiPolygon records, then transform the exclusions to EPSG:4283 and validate them again. An empty layer with a defined CRS represents no exclusions. Missing or invalid input, an invalid exclusion union or a failed subtraction blocks publication and identifies the input or coastline record in the console. Do not repair geometry automatically.
+
+Subtract the union of the exclusions only from intersecting coastline records. Validate each result before extracting its polygon parts. Entirely excluded coastline records are omitted from the working mask. No minimum-area filter is applied to the remaining land. Preserve normal reef clipping, fragment filtering, cay exemptions and split-review rules elsewhere. Report the exclusion count and number of changed coastline records. Neither the source coastline nor the exclusion layer is modified. Stages 01e and 02d must use the same exclusion layer; after changing it, rerun stages 01e, 02a and 02d before stage 03.
 
 Exempt cay records from land subtraction. In Reef Edit these are `RB_Type_L3` values `Vegetated Cay` and `Unvegetated Cay`. Three `Unvegetated Cay` records were present on 31 October 2026. Preserve their mapped extent subject to the limitations below.
 
@@ -126,7 +131,7 @@ Every part of a split coded source feature carries the same `CODE`. Stage 02a tr
 
 Clipping before allocation lets these rules operate on the marine components that will actually become L3 records. Exploding an already identified editing polygon afterwards would merely copy its ID fields into several rows. Making those rows' feature IDs unique would not resolve their official identity or historic lineage.
 
-Change stage 02a's Reef Edit input to `working/01/Reef-Edit-clipped.shp`. Stage 02a must reset to a unique row index on reading, because its identifier maps are keyed by index. Its refreshed legacy input and Remove-Move source remain unchanged. This preserves the original old geometries used for move/remove matching, attachment calculation and historical comparison. No clipping is inserted into those supporting operations.
+Change stage 02a's Reef Edit input to `working/{version}/01/Reef-Edit-clipped.shp`. Stage 02a must reset to a unique row index on reading, because its identifier maps are keyed by index. Its refreshed legacy input and Remove-Move source remain unchanged. This preserves the original old geometries used for move/remove matching, attachment calculation and historical comparison. No clipping is inserted into those supporting operations.
 
 Clipping can remove an overlap previously used to link an editing polygon to an old feature. Existing `CODE` relationships remain available, but overlap-only relationships and `Link` points may change. Review the existing stage 02a identifier reports after regeneration. Resolve missing relationships through the established editing and control-point workflow, not through a new matching rule.
 
@@ -136,7 +141,7 @@ The intended execution order is stage 01d, stage 01e, stage 02a, then stage 02d 
 
 Stages 01e and 02d will use substantial shared geometry operations in [reef_utils.py](reef_utils.py), rather than duplicate the clipping algorithm. Its existing functions address L2 dissolution, seam repair and countable-reef clustering. They do not currently provide coastline subtraction. The existing buffering and simplification operations must not be used to hide clipping fragments.
 
-Factor coastline preparation into a shared operation that reads and validates the polygon landmask, transforms it to EPSG:4283, validates the transformed geometry and builds its spatial index. Factor clipping of one single Polygon into another shared operation. It finds intersecting land with the spatial index, unions only that land, subtracts it and validates results without automatic repair. It returns the original polygon as one part when unchanged. For altered valid results it discards non-polygonal by-products and filters polygon parts using the minimum-area rule. Return the retained polygon parts and the number of removed fragments. The caller infers trim, split or removal from the retained-part count. No component relationship structure or point-contact analysis is required. Geometry failures must retain their processing step for reporting with the caller's source reference and must not be returned as successful clips. The operation must not mutate source data or silently recover by returning an original polygon after a failed subtraction. The minimum area is a parameter with a default of 100 m², measured in EPSG:3577.
+Factor coastline preparation into a shared operation that reads and validates the polygon landmask, transforms it to EPSG:4283, validates the transformed geometry, subtracts the validated pier exclusions and builds its spatial index. Factor clipping of one single Polygon into another shared operation. It finds intersecting land with the spatial index, unions only that land, subtracts it and validates results without automatic repair. It returns the original polygon as one part when unchanged. For altered valid results it discards non-polygonal by-products and filters polygon parts using the minimum-area rule. Return the retained polygon parts and the number of removed fragments. The caller infers trim, split or removal from the retained-part count. No component relationship structure or point-contact analysis is required. Geometry failures must retain their processing step for reporting with the caller's source reference and must not be returned as successful clips. The operation must not mutate source data or silently recover by returning an original polygon after a failed subtraction. The minimum area is a parameter with a default of 100 m², measured in EPSG:3577.
 
 Their final function names and return types can be chosen during implementation. Do not extract small expressions or introduce a general processing framework merely to share code. Process features sequentially.
 

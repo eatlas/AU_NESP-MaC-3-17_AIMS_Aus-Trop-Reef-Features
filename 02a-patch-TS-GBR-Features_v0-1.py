@@ -67,7 +67,7 @@ Notes:
 - A limitation of this approach is that the reef allocation does not
  consider depth in the RB_Type_L3 classification.
 
-Output: working/02/TS-GBR-Features-patched.shp
+Output: working/v0-1/02/TS-GBR-Features-patched.shp
 
 Part of: NESP Marine and Coastal Hub Project 3.17
 """
@@ -95,7 +95,7 @@ override_path = os.path.join(base_path, "in", "Complete-GBR-FeatType-Override.sh
 extra_features_path = os.path.join(base_path, "in", "Complete-GBR-ExtraFeatures.shp")
 # rb_type_lut_path = os.path.join(base_path, "in", "RB_Type_L3_Classification.csv")
 rb_type_lut_path = os.path.join(download_path, "NW-Aus-Feat_v0-4", "in", "RB_Type_L3_crosswalk.csv")
-output_dir = "working/02"
+output_dir = os.path.join("working", VERSION, "02")
 output_path = os.path.join(output_dir, "TS-GBR-Features-patched.shp")
 
 def load_classification_lookup(csv_path):

@@ -25,12 +25,13 @@ Processing order: moves, then removals, then overlap replacements.
 
 Inputs:
     - Refreshed GBR-TS features produced by 01d-refresh-TS-GBR-Features.py
-  - Reef Edit polygons with full RB_Type_L3 attributes
+  - Reef Edit polygons with full RB_Type_L3 attributes, clipped to the
+    coastline by 01e-clip-TS-GBR-reef-edit.py (working/{version}/01/Reef-Edit-clipped.shp)
   - Remove-Move points
   - RB_Type_L3 crosswalk CSV (for retained old features)
 
-Output: working/02/TS-GBR-Features-patched.shp
-        working/02/debug-reefid-review.gpkg (identifier review layers)
+Output: working/{version}/02/TS-GBR-Features-patched.shp
+        working/{version}/02/debug-reefid-review.gpkg (identifier review layers)
 
 Part of: NESP Marine and Coastal Hub Project 3.17
 """
@@ -72,9 +73,9 @@ VERSION = config.get('general', 'version')
 NW_AUS_FEAT_VERSION = config.get('general', 'nw_aus_feat_version')
 
 # Input paths
-gbr_path = os.path.join("working", "01", "TS-GBR-Features-latest.shp")
-reef_edit_path = os.path.join(in_path, "Reef-edit",
-                              f"AIMS_GBR-TS-Features_Edit_{VERSION}.shp")
+gbr_path = os.path.join("working", VERSION, "01", "TS-GBR-Features-latest.shp")
+# Reef Edit clipped to the coastline by 01e-clip-TS-GBR-reef-edit.py
+reef_edit_path = os.path.join("working", VERSION, "01", "Reef-Edit-clipped.shp")
 remove_move_path = os.path.join(in_path, "Reef-remove-move",
                                 f"AIMS_GBR-TS-Features_remove-move_{VERSION}.shp")
 crosswalk_path = os.path.join(in_3p_path, f"NW-Aus-Feat_{NW_AUS_FEAT_VERSION}", "in",
@@ -83,7 +84,7 @@ inshore_extent_path = os.path.join("data", VERSION, "extras", "inshore-extent",
                                    "inshore-extent.shp")
 
 # Output
-output_dir = "working/02"
+output_dir = os.path.join("working", VERSION, "02")
 output_path = os.path.join(output_dir, "TS-GBR-Features-patched.shp")
 review_path = os.path.join(output_dir, "debug-reefid-review.gpkg")
 
@@ -248,7 +249,12 @@ def main():
     print(f"  {len(gbr)} GBR features loaded")
 
     print(f"  Reading Reef Edit from {reef_edit_path}")
+    if not os.path.exists(reef_edit_path):
+        print(f"ERROR: {reef_edit_path} not found. Run 01e-clip-TS-GBR-reef-edit.py first.")
+        sys.exit(1)
     reef_edit = gpd.read_file(reef_edit_path)
+    # Identifier maps are keyed by index, so it must be a unique row index.
+    reef_edit = reef_edit.reset_index(drop=True)
     reef_edit = reef_edit.to_crs(epsg=4283)
     print(f"  {len(reef_edit)} Reef Edit features loaded")
 
@@ -922,7 +928,9 @@ def main():
     output_columns = [
         'RB_Type_L3', 'Attachment', 'DepthCat', 'DepthCatSr',
         'FeatConf', 'TypeConf', 'EdgeSrc', 'EdgeAcc_m',
-        'OrigType', 'Dataset', 'ReefFID', 'ReefID', 'CODES', 'PrevReefID', 'geometry'
+        'OrigType', 'Dataset', 'ReefFID', 'ReefID', 'CODES', 'PrevReefID',
+        # Stage 01e tracking fields (null for legacy records, dropped in stage 03)
+        'RE_row', 'RE_part', 'geometry'
     ]
 
     # Keep only output columns that exist (others are discarded)

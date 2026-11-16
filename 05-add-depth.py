@@ -19,7 +19,7 @@ OUTPUTS:
       - DEM10pLAT, DEM50pLAT, DEM90pLAT: Depth percentiles relative to Lowest Astronomical Tide
       - DepthCat: Depth category classification
       - DepthCatSr: Source of the depth category (DEM source or rule name)
-      - DEMSr: DEM source used for each polygon
+      - DEMSr: DEM source, followed by ';EOT20' when LAT statistics are available
 
 ALGORITHM:
     1. Load the LPT raster entirely into memory (small: 2336x1216 pixels)
@@ -41,16 +41,16 @@ ALGORITHM:
          * Very Shallow: DEM90pLAT < 0 and >= -2.5
          * Shallow: DEM90pLAT < -2.5 and DEM90pMSL >= -30
          * Deep: DEM90pMSL < -30
-    5. Record the source of the depth category and the DEM source
+    5. Record the source of the depth category and refresh DEM/LAT provenance
     6. Save the enhanced dataset to a new shapefile
 
 TEST MODE (--test):
     Exercises the production LPT lookup code paths over a test region
     (Whitsundays/Mackay, -20.4 to -22.7 S, 149.18 to 151.2 E) and outputs
     three rasters at DEM native resolution:
-    - working/05/test_dem_msl.tif: Raw DEM values (MSL)
-    - working/05/test_lpt_looked_up.tif: LPT values retrieved via LPTLookup
-    - working/05/test_dem_lat.tif: LAT-adjusted DEM (DEM - LPT)
+    - working/{version}/05/test_dem_msl.tif: Raw DEM values (MSL)
+    - working/{version}/05/test_lpt_looked_up.tif: LPT values retrieved via LPTLookup
+    - working/{version}/05/test_dem_lat.tif: LAT-adjusted DEM (DEM - LPT)
     Verification: compare test_lpt_looked_up against original LPT (should match
     spatially), and test_dem_msl - test_dem_lat should exactly equal test_lpt_looked_up.
 
@@ -61,6 +61,8 @@ HANDLING SPECIAL CASES:
     - Existing DepthCat values: Preserved for features that already have a depth category
 
 NOTES:
+    - Raster lookup and DEM percentile calculations are shared with stage 08
+      through reef_utils.py. Depth category rules remain specific to stage 05.
     - Positive values represent elevation above sea level
     - Negative values represent depth below sea level
     - The 90th percentile value represents the highest/shallowest point within each reef
@@ -68,257 +70,67 @@ NOTES:
     - LAT conversion: depth_LAT = depth_MSL - LPT (where LPT is negative relative to MSL)
     - The Shallow/Deep boundary (-30 m) uses MSL datum to align with satellite-derived
       depth estimates using the green channel
+
+DATA FORMATS:
+    - Raster arrays use (rows, columns), or (bands, rows, columns) when band-first.
+      Floating-point arrays use NaN for missing values after nodata masking.
+    - Coordinate arrays contain pixel-centre x/y values in the DEM CRS, not
+      necessarily longitude/latitude. Flattened arrays retain matching pixel order.
+    - Reef tables contain one row per polygon. DEM percentile columns are
+      floating-point elevations in metres; missing table values may be None or NaN.
+      DEMSr and DepthCatSr identify sources; DepthCat contains category text.
+    - Type hints describe data for readers and static analysis, not runtime checks.
 """
 
 import os
-import sys
 import argparse
 import geopandas as gpd
 import rasterio
 import numpy as np
-from rasterio.mask import mask
-from rasterio.transform import rowcol
+from numpy.typing import NDArray
+from rasterio.crs import CRS
 from rasterio.windows import from_bounds
-from shapely.geometry import mapping, box
-from rasterio.sample import sample_gen
+from shapely.geometry import box
 import configparser
 import pandas as pd
-import math
-from osgeo import gdal
+from reef_utils import (
+    DEM_FIELDS,
+    LPTLookup,
+    MULTIRES_BATHY_NODATA,
+    calculate_depth_statistics,
+    get_pixel_coordinates,
+    prepare_depth_rasters,
+)
 
 # Read configuration for DEM dataset paths
 config = configparser.ConfigParser()
 config.read('config.ini')
 download_path = config.get('general', 'in_3p_path')
+version = config.get('general', 'version')
 
 # Define input and output paths
-INPUT_SHAPE = "working/04/TS-GBR-CS-NW-Features-Country.shp"
-MULTIRES_VRT = "working/05/MultiRes-Bathy-EEZ_2024.vrt"
-MULTIRES_TIFS = [
-    os.path.join(download_path, "MultiRes-Bathy-EEZ_2024", "01_shallow_bathy.tif"),
-    os.path.join(download_path, "MultiRes-Bathy-EEZ_2024", "02_mesophotic_bathy.tif"),
-]
-AUSBATHYTOPO_TIF = os.path.join(download_path, "AusBathyTopo-250m_2024", "AusBathyTopo__Australia__2024_250m_MSL_cog.tif")
+INPUT_SHAPE = os.path.join("working", version, "04", "TS-GBR-CS-NW-Features-Country.shp")
+OUTPUT_DIR = os.path.join("working", version, "05")
+MULTIRES_VRT = os.path.join(OUTPUT_DIR, "MultiRes-Bathy-EEZ_2024.vrt")
 LPT_TIF = os.path.join(download_path, "EOT20-tides", "AU_AIMS_EOT20-tide-stats_LPT_2021-01-2025-12.tif")
-OUTPUT_DIR = "working/05"
 OUTPUT_SHAPE = os.path.join(OUTPUT_DIR, "TS-GBR-CS-NW-Features-depth.shp")
 
 # Create output directory if it doesn't exist
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
 
-class LPTLookup:
-    """Loads the LPT raster into memory and provides fast per-pixel lookups."""
-
-    def __init__(self, lpt_path):
-        print(f"Loading LPT raster into memory from {lpt_path} ...")
-        with rasterio.open(lpt_path) as src:
-            self.data = src.read(1)  # Single band
-            self.transform = src.transform
-            self.crs = src.crs
-            self.nodata = src.nodata
-            self.bounds = src.bounds
-            self.height = src.height
-            self.width = src.width
-        print(f"  LPT raster loaded: {self.width}x{self.height} pixels, "
-              f"bounds: {self.bounds}, nodata: {self.nodata}")
-        print(f"  LPT value range: {np.nanmin(self.data[self.data != self.nodata]):.4f} to "
-              f"{np.nanmax(self.data[self.data != self.nodata]):.4f}")
-
-    def get_value(self, x, y):
-        """Get LPT value at a geographic coordinate (x=lon, y=lat).
-        Returns None if outside bounds or nodata."""
-        # Convert geographic coordinate to pixel row/col
-        col, row = ~self.transform * (x, y)
-        row, col = int(round(row)), int(round(col))
-        if row < 0 or row >= self.height or col < 0 or col >= self.width:
-            return None
-        val = self.data[row, col]
-        if self.nodata is not None and val == self.nodata:
-            return None
-        if np.isnan(val):
-            return None
-        return float(val)
-
-    def get_values_for_pixels(self, xs, ys):
-        """Get LPT values for arrays of geographic coordinates in LPT's own CRS.
-        Returns a numpy array with NaN where no valid LPT exists."""
-        # Convert geographic coordinates to pixel row/col using the inverse transform
-        inv_transform = ~self.transform
-        cols, rows = inv_transform * (xs, ys)
-        rows = np.round(rows).astype(int)
-        cols = np.round(cols).astype(int)
-
-        # Create output array filled with NaN
-        result = np.full(len(xs), np.nan)
-
-        # Mask for valid pixel indices
-        valid = (rows >= 0) & (rows < self.height) & (cols >= 0) & (cols < self.width)
-        if np.any(valid):
-            vals = self.data[rows[valid], cols[valid]]
-            # Mask nodata
-            if self.nodata is not None:
-                vals = np.where(vals == self.nodata, np.nan, vals)
-            result[valid] = vals
-
-        return result
-
-    def get_values_for_coords(self, xs, ys, source_crs):
-        """Get LPT values for coordinate arrays, reprojecting from source_crs if needed.
-        This is the canonical method for looking up LPT values from any CRS.
-        Returns a numpy array with NaN where no valid LPT exists."""
-        import pyproj
-        if source_crs is not None and self.crs is not None and source_crs != self.crs:
-            transformer = pyproj.Transformer.from_crs(source_crs, self.crs, always_xy=True)
-            lpt_xs, lpt_ys = transformer.transform(xs, ys)
-        else:
-            lpt_xs, lpt_ys = xs, ys
-        return self.get_values_for_pixels(lpt_xs, lpt_ys)
-
-
-def create_multires_vrt():
-    """Create MultiResBathyEEZ VRT if it doesn't exist."""
-    if not os.path.exists(MULTIRES_VRT):
-        os.makedirs(os.path.dirname(MULTIRES_VRT), exist_ok=True)
-        print(f"Creating MultiResBathyEEZ VRT at {MULTIRES_VRT} ...")
-        vrt = gdal.BuildVRT(MULTIRES_VRT, MULTIRES_TIFS)
-        vrt = None  # flush to disk
-        print("MultiResBathyEEZ VRT created.")
-    else:
-        print("MultiResBathyEEZ VRT already exists.")
-
-
-def get_pixel_coordinates(out_image, out_transform):
-    """Given a masked raster output and its transform, return arrays of
-    geographic (x, y) coordinates for all pixels in the output grid."""
-    nrows, ncols = out_image.shape[1], out_image.shape[2]
-    # Create grid of pixel indices
-    col_indices, row_indices = np.meshgrid(np.arange(ncols), np.arange(nrows))
-    # Convert pixel indices to geographic coordinates (pixel centres)
-    xs = out_transform.c + (col_indices + 0.5) * out_transform.a + (row_indices + 0.5) * out_transform.b
-    ys = out_transform.f + (col_indices + 0.5) * out_transform.d + (row_indices + 0.5) * out_transform.e
-    return xs, ys
-
-
-def get_percentiles_with_lat(geometry, raster_src, nodata_val, lpt_lookup,
-                              feature_idx=None, geometry_crs=None, raster_crs=None):
-    """Calculate percentiles (10, 50, 90) for both MSL and LAT-adjusted depths.
-
-    For each valid DEM pixel within the polygon, looks up the LPT value at the same
-    geographic location and computes: depth_LAT = depth_MSL - LPT
-
-    Returns: (p10_msl, p50_msl, p90_msl, p10_lat, p50_lat, p90_lat) or all None on failure.
-    """
-    import pyproj
-    from shapely.ops import transform as shapely_transform
-
-    try:
-        # Reproject geometry to raster CRS if needed
-        if geometry_crs is not None and raster_crs is not None and geometry_crs != raster_crs:
-            project = pyproj.Transformer.from_crs(geometry_crs, raster_crs, always_xy=True).transform
-            geom_proj = shapely_transform(project, geometry)
-        else:
-            geom_proj = geometry
-
-        geom = [mapping(geom_proj)]
-        out_image, out_transform = mask(raster_src, geom, crop=True, all_touched=False, nodata=nodata_val)
-        arr = out_image[0]
-
-        # Mask nodata and NaN
-        valid_mask = (arr != nodata_val) & (~np.isnan(arr))
-
-        if not np.any(valid_mask):
-            # Fallback: centroid sampling
-            centroid = geometry.centroid
-            # Reproject centroid to raster CRS for sampling
-            if geometry_crs is not None and raster_crs is not None and geometry_crs != raster_crs:
-                from shapely.geometry import Point
-                centroid_proj = shapely_transform(project, centroid)
-                sample_pt = (centroid_proj.x, centroid_proj.y)
-            else:
-                sample_pt = (centroid.x, centroid.y)
-
-            val = list(raster_src.sample([sample_pt]))[0][0]
-            if val == nodata_val or np.isnan(val):
-                return None, None, None, None, None, None
-
-            dem_msl = float(val)
-
-            # Get LPT at centroid (in LPT's CRS, which is EPSG:4326)
-            # The centroid in the original geometry CRS should be close to EPSG:4326
-            # If geometry_crs differs from LPT CRS, reproject
-            if geometry_crs is not None and lpt_lookup.crs is not None and geometry_crs != lpt_lookup.crs:
-                project_to_lpt = pyproj.Transformer.from_crs(geometry_crs, lpt_lookup.crs, always_xy=True).transform
-                centroid_lpt = shapely_transform(project_to_lpt, centroid)
-                lpt_val = lpt_lookup.get_value(centroid_lpt.x, centroid_lpt.y)
-            else:
-                lpt_val = lpt_lookup.get_value(centroid.x, centroid.y)
-
-            if lpt_val is None:
-                # No LPT data; return MSL only
-                return dem_msl, dem_msl, dem_msl, None, None, None
-
-            dem_lat = dem_msl - lpt_val
-            return dem_msl, dem_msl, dem_msl, dem_lat, dem_lat, dem_lat
-
-        # We have valid pixels - get their geographic coordinates
-        xs, ys = get_pixel_coordinates(out_image, out_transform)
-
-        # Extract valid MSL values and their coordinates
-        valid_msl = arr[valid_mask]
-        valid_xs = xs[valid_mask]
-        valid_ys = ys[valid_mask]
-
-        # Get LPT values for all valid pixels (handles CRS reprojection internally)
-        lpt_values = lpt_lookup.get_values_for_coords(valid_xs, valid_ys, raster_crs)
-
-        # Calculate LAT-adjusted values: DEM_LAT = DEM_MSL - LPT
-        valid_lat = valid_msl - lpt_values  # NaN propagates where LPT is missing
-
-        # Calculate MSL percentiles
-        p10_msl = float(np.nanpercentile(valid_msl, 10))
-        p50_msl = float(np.nanpercentile(valid_msl, 50))
-        p90_msl = float(np.nanpercentile(valid_msl, 90))
-
-        # Calculate LAT percentiles (only from pixels with valid LPT)
-        lat_valid = valid_lat[~np.isnan(valid_lat)]
-        if lat_valid.size > 0:
-            p10_lat = float(np.nanpercentile(lat_valid, 10))
-            p50_lat = float(np.nanpercentile(lat_valid, 50))
-            p90_lat = float(np.nanpercentile(lat_valid, 90))
-        else:
-            p10_lat, p50_lat, p90_lat = None, None, None
-
-        return p10_msl, p50_msl, p90_msl, p10_lat, p50_lat, p90_lat
-
-    except Exception as e:
-        print(f"Error extracting percentiles for feature {feature_idx}: {e}")
-        return None, None, None, None, None, None
-
-
-def assign_depth_percentiles(geometry, rasters, lpt_lookup, feature_idx=None, geometry_crs=None):
-    """Try each raster in order, return MSL and LAT percentiles and source name."""
-    import pyproj
-
-    for raster_path, nodata_val, src_name in rasters:
-        if not os.path.exists(raster_path):
-            continue
-        with rasterio.open(raster_path) as src:
-            raster_crs = src.crs
-            result = get_percentiles_with_lat(
-                geometry, src, nodata_val, lpt_lookup,
-                feature_idx=feature_idx, geometry_crs=geometry_crs, raster_crs=raster_crs
-            )
-            p10_msl, p50_msl, p90_msl, p10_lat, p50_lat, p90_lat = result
-            if all(v is not None for v in (p10_msl, p50_msl, p90_msl)):
-                return p10_msl, p50_msl, p90_msl, p10_lat, p50_lat, p90_lat, src_name
-
-    print(f"WARNING: No valid raster found for feature {feature_idx}. Geometry bounds: {geometry.bounds}")
-    return None, None, None, None, None, None, None
-
-
-def determine_depth_category(p90_msl, p90_lat):
+def determine_depth_category(
+    p90_msl: float | None,
+    p90_lat: float | None,
+) -> str | None:
     """Determine depth category based on DEM90pLAT and DEM90pMSL values.
+
+    Args:
+        p90_msl: 90th-percentile elevation in metres relative to MSL, or None.
+        p90_lat: 90th-percentile elevation in metres relative to LAT, or None.
+
+    Returns:
+        Intertidal, Very Shallow, Shallow or Deep; None if p90_msl is None.
 
     Logic:
       - Intertidal: DEM90pLAT >= 0
@@ -343,7 +155,7 @@ def determine_depth_category(p90_msl, p90_lat):
         return "Deep"
 
 
-def run_test_mode():
+def run_test_mode() -> None:
     """Test mode: exercises the production LPT lookup code path over a test region.
 
     Uses the same get_pixel_coordinates() and LPTLookup.get_values_for_pixels() functions
@@ -353,9 +165,9 @@ def run_test_mode():
     This covers a large tidal range gradient and reef areas that should become intertidal.
 
     Creates (all at DEM native resolution, clipped to test region):
-      - working/05/test_dem_msl.tif: Raw DEM values (MSL)
-      - working/05/test_lpt_looked_up.tif: LPT values retrieved via LPTLookup (production code path)
-      - working/05/test_dem_lat.tif: LAT-adjusted DEM (DEM - LPT)
+      - working/{version}/05/test_dem_msl.tif: Raw DEM values (MSL)
+      - working/{version}/05/test_lpt_looked_up.tif: LPT values retrieved via LPTLookup (production code path)
+      - working/{version}/05/test_dem_lat.tif: LAT-adjusted DEM (DEM - LPT)
 
     Verification in QGIS:
       1. Compare test_lpt_looked_up.tif against the original LPT raster — should match
@@ -373,17 +185,17 @@ def run_test_mode():
     print(f"Test region: lon {test_minx} to {test_maxx}, lat {test_miny} to {test_maxy}")
 
     # Load LPT lookup using the production class
-    lpt_lookup = LPTLookup(LPT_TIF)
+    lpt_lookup: LPTLookup = LPTLookup(LPT_TIF)
 
     # Open DEM and extract the test region at native resolution
     dem_path = MULTIRES_VRT
     if not os.path.exists(dem_path):
-        create_multires_vrt()
+        prepare_depth_rasters(download_path, MULTIRES_VRT)
 
     print(f"\nOpening DEM raster: {dem_path}")
     with rasterio.open(dem_path) as dem_src:
-        dem_crs = dem_src.crs
-        dem_nodata = 3.4e+38
+        dem_crs: CRS | None = dem_src.crs
+        dem_nodata = MULTIRES_BATHY_NODATA
         print(f"  DEM CRS: {dem_crs}")
         print(f"  DEM resolution: {dem_src.res}")
 
@@ -411,14 +223,17 @@ def run_test_mode():
         dem_data = dem_src.read(1, window=window)
         dem_transform = dem_src.window_transform(window)
 
-    # Mask nodata
-    dem_msl = dem_data.astype(np.float32)
+    # Shape (rows, columns); elevation in metres relative to MSL, NaN for nodata.
+    dem_msl: NDArray[np.float32] = dem_data.astype(np.float32)
     dem_msl[dem_data == dem_nodata] = np.nan
 
     # Now use the PRODUCTION code path to look up LPT values for each DEM pixel
     print("  Computing pixel coordinates using get_pixel_coordinates()...")
     # get_pixel_coordinates expects shape (1, nrows, ncols) for out_image
-    out_image_3d = dem_msl[np.newaxis, :, :]
+    out_image_3d: NDArray[np.float32] = dem_msl[np.newaxis, :, :]
+    # Pixel-centre grids, shape (rows, columns), in the DEM CRS.
+    xs: NDArray[np.float64]
+    ys: NDArray[np.float64]
     xs, ys = get_pixel_coordinates(out_image_3d, dem_transform)
 
     print(f"  Coordinate grid shape: {xs.shape}")
@@ -426,21 +241,23 @@ def run_test_mode():
     print(f"  Y range: {ys.min():.4f} to {ys.max():.4f}")
 
     # Flatten for LPT lookup (same as production code)
-    xs_flat = xs.ravel()
-    ys_flat = ys.ravel()
+    xs_flat: NDArray[np.float64] = xs.ravel()
+    ys_flat: NDArray[np.float64] = ys.ravel()
 
     # Use production LPTLookup.get_values_for_coords() (handles CRS reprojection internally)
     print("  Looking up LPT values using LPTLookup.get_values_for_coords()...")
-    lpt_values_flat = lpt_lookup.get_values_for_coords(xs_flat, ys_flat, dem_crs)
-    lpt_looked_up = lpt_values_flat.reshape(dem_msl.shape)
+    # One LPT elevation (metres relative to MSL) per DEM pixel; NaN if unavailable.
+    lpt_values_flat: NDArray[np.float64] = lpt_lookup.get_values_for_coords(xs_flat, ys_flat, dem_crs)
+    lpt_looked_up: NDArray[np.float64] = lpt_values_flat.reshape(dem_msl.shape)
 
     # Calculate LAT-adjusted DEM using production formula: DEM_LAT = DEM_MSL - LPT
-    dem_lat = dem_msl - lpt_looked_up
+    dem_lat: NDArray[np.float64] = dem_msl - lpt_looked_up
 
     # Report statistics
-    valid_msl = dem_msl[~np.isnan(dem_msl)]
-    valid_lpt = lpt_looked_up[~np.isnan(lpt_looked_up)]
-    valid_lat = dem_lat[~np.isnan(dem_lat)]
+    # One-dimensional arrays of non-missing elevations for summary statistics.
+    valid_msl: NDArray[np.float32] = dem_msl[~np.isnan(dem_msl)]
+    valid_lpt: NDArray[np.float64] = lpt_looked_up[~np.isnan(lpt_looked_up)]
+    valid_lat: NDArray[np.float64] = dem_lat[~np.isnan(dem_lat)]
     print(f"\n  Statistics for test region:")
     print(f"    DEM MSL: {valid_msl.size} valid pixels, range [{valid_msl.min():.2f}, {valid_msl.max():.2f}]")
     print(f"    LPT looked up: {valid_lpt.size} valid pixels, range [{valid_lpt.min():.4f}, {valid_lpt.max():.4f}]")
@@ -493,7 +310,8 @@ def run_test_mode():
     print("TEST MODE COMPLETE")
 
 
-def main():
+def main() -> None:
+    """Read reef polygons, add depth statistics and categories, and save a shapefile."""
     parser = argparse.ArgumentParser(description="Add depth statistics to reef polygons")
     parser.add_argument('--test', action='store_true',
                         help='Run in test mode: output verification rasters and exit')
@@ -504,34 +322,14 @@ def main():
         return
 
     # Load LPT lookup
-    lpt_lookup = LPTLookup(LPT_TIF)
+    lpt_lookup: LPTLookup = LPTLookup(LPT_TIF)
 
     print(f"Reading shapefile from {INPUT_SHAPE}")
-    reefs = gpd.read_file(INPUT_SHAPE)
+    # One row per reef, with Polygon/MultiPolygon geometry and classification fields.
+    reefs: gpd.GeoDataFrame = gpd.read_file(INPUT_SHAPE)
 
-    # Debug: Check bounds of all features before any reprojection
-    all_bounds = np.array([geom.bounds for geom in reefs.geometry])
-    minx, miny = np.min(all_bounds[:, 0]), np.min(all_bounds[:, 1])
-    maxx, maxy = np.max(all_bounds[:, 2]), np.max(all_bounds[:, 3])
-    print(f"Input shapefile feature bounds: minx={minx}, maxx={maxx}, miny={miny}, maxy={maxy}")
-    # Flag features outside lon/lat range
-    out_of_range = []
-    for idx, (xmin, ymin, xmax, ymax) in enumerate(all_bounds):
-        if not (-180 <= xmin <= 180 and -180 <= xmax <= 180 and -90 <= ymin <= 90 and -90 <= ymax <= 90):
-            out_of_range.append(idx)
-    if out_of_range:
-        print(f"WARNING: {len(out_of_range)} features have bounds outside -180/180/-90/90 (indices: {out_of_range[:10]}...)")
-    else:
-        print("All features are within expected longitude/latitude bounds.")
-
-    # Create VRT if needed
-    create_multires_vrt()
-
-    # Prepare raster fallback order: MultiResBathyEEZ, then AusBathyTopo
-    rasters = [
-        (MULTIRES_VRT, 3.4e+38, "MultiResBathyEEZ_2024"),
-        (AUSBATHYTOPO_TIF, 3.4e+38, "AusBathyTopo-250m_2024"),
-    ]
+    # Fallback order of (raster path, nodata sentinel, source name).
+    rasters: list[tuple[str, float, str]] = prepare_depth_rasters(download_path, MULTIRES_VRT)
 
     print(f"Reading raster from {MULTIRES_VRT}")
     with rasterio.open(MULTIRES_VRT) as src:
@@ -542,46 +340,16 @@ def main():
         if src.crs != reefs.crs:
             print("Reprojecting shapefile to match raster CRS...")
             reefs = reefs.to_crs(src.crs)
-        current_crs = reefs.crs
 
-    # Calculate statistics for each polygon
-    print("Calculating depth percentiles (MSL and LAT) within each reef polygon...")
-    p10_msl_values, p50_msl_values, p90_msl_values = [], [], []
-    p10_lat_values, p50_lat_values, p90_lat_values = [], [], []
-    src_values = []
-    total = len(reefs)
-    for i, geom in enumerate(reefs.geometry):
-        if i % 1000 == 0:
-            print(f"Processing feature {i+1}/{total}...")
-        result = assign_depth_percentiles(geom, rasters, lpt_lookup,
-                                          feature_idx=i, geometry_crs=current_crs)
-        p10_msl, p50_msl, p90_msl, p10_lat, p50_lat, p90_lat, src_name = result
-        p10_msl_values.append(p10_msl)
-        p50_msl_values.append(p50_msl)
-        p90_msl_values.append(p90_msl)
-        p10_lat_values.append(p10_lat)
-        p50_lat_values.append(p50_lat)
-        p90_lat_values.append(p90_lat)
-        src_values.append(src_name)
-
-    # Add MSL values to the GeoDataFrame
-    print("Adding depth percentile statistics to the shapefile...")
-    reefs['DEM10pMSL'] = [round(x, 1) if x is not None else None for x in p10_msl_values]
-    reefs['DEM50pMSL'] = [round(x, 1) if x is not None else None for x in p50_msl_values]
-    reefs['DEM90pMSL'] = [round(x, 1) if x is not None else None for x in p90_msl_values]
-
-    # Add LAT values
-    reefs['DEM10pLAT'] = [round(x, 1) if x is not None else None for x in p10_lat_values]
-    reefs['DEM50pLAT'] = [round(x, 1) if x is not None else None for x in p50_lat_values]
-    reefs['DEM90pLAT'] = [round(x, 1) if x is not None else None for x in p90_lat_values]
+    # Refresh the six percentile fields (metres, MSL/LAT) and their source together.
+    depth_statistics: pd.DataFrame = calculate_depth_statistics(reefs, rasters, lpt_lookup)
+    reefs[list(DEM_FIELDS)] = depth_statistics[list(DEM_FIELDS)]
 
     # Ensure required columns exist
     if 'DepthCat' not in reefs.columns:
         reefs['DepthCat'] = None
     if 'DepthCatSr' not in reefs.columns:
         reefs['DepthCatSr'] = None
-    if 'DEMSr' not in reefs.columns:
-        reefs['DEMSr'] = None
 
     # Calculate depth categories and sources where needed
     print("Calculating depth categories and sources...")
@@ -591,7 +359,7 @@ def main():
             rb_type = str(row.get('RB_Type_L3', '')).strip()
             attachment = str(row.get('Attachment', '')).strip()
             orig_type = str(row.get('OrigType', '')).strip()
-            est_depth_cat = determine_depth_category(row['DEM90pMSL'], row['DEM90pLAT'])
+            est_depth_cat: str | None = determine_depth_category(row['DEM90pMSL'], row['DEM90pLAT'])
 
             # Apply rules. These compensate for imperfect estimates from the DEM.
             rule_applied = False
@@ -637,11 +405,7 @@ def main():
             # If no rule applied, use estimated depth category
             if not rule_applied and est_depth_cat:
                 reefs.at[i, 'DepthCat'] = est_depth_cat
-                reefs.at[i, 'DepthCatSr'] = src_values[i]
-
-        # Set DEM source
-        if pd.isna(row['DEMSr']) or row['DEMSr'] is None or row['DEMSr'] == '':
-            reefs.at[i, 'DEMSr'] = src_values[i]
+                reefs.at[i, 'DepthCatSr'] = row['DEMSr']
 
     # Save the result
     print(f"Saving output shapefile to {OUTPUT_SHAPE}")

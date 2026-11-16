@@ -23,7 +23,7 @@ run.
 
 ## Opening the layers
 
-The file is `working/02/debug-reefid-review.gpkg`, written fresh on every run of
+The file is `working/{version}/02/debug-reefid-review.gpkg`, written fresh on every run of
 `02a-patch-TS-GBR-Features.py`. Drag it into QGIS and all layers load together. The coordinate
 system is EPSG:4283, matching the dataset.
 
@@ -31,7 +31,7 @@ A layer with no records is not written at all, and the run output says so. An ab
 therefore means the check passed, not that something failed. On the current input
 `override-problems` is absent for this reason.
 
-Load the input mapping alongside it. The old boundaries are in `working/01/TS-GBR-Features-latest.shp`,
+Load the input mapping alongside it. The old boundaries are in `working/{version}/01/TS-GBR-Features-latest.shp`,
 the new mapping is `data/{version}/in/Reef-edit/AIMS_GBR-TS-Features_Edit_{version}.shp`, and the
 control points are `data/{version}/in/Reef-remove-move/AIMS_GBR-TS-Features_remove-move_{version}.shp`.
 Most decisions need all three plus the underlying imagery.
@@ -55,16 +55,8 @@ Setting `CODE` on a new polygon is the alternative to a `Move` point where the o
 displaced far enough that no overlap remains. Several new polygons may carry the same `CODE`, which
 records that they all derive from one old feature.
 
-![Where each control point goes](figures/r3-control-points.svg)
-
-**Figure 1.** Where each control point is placed. A `Move` point goes on the old feature and
-deletes it, with the replacement polygon carrying the old `CODE` so that the relationship is
-forced regardless of geometry. Use it where the old mapping is displaced. A `Remove` point also
-goes on the old feature but implies no successor, so the identifier is reported as deliberately
-removed rather than lost. Use it where the feature was mapped in error. A `Link` point goes
-inside the overlap, within both polygons, and records a previous identifier only. Keep `Link`
-points clear of the rocks and cays that sit nested inside reefs, since a point inside one of
-those selects the wrong old feature. No identifier is typed on either layer.
+Keep `Link` points clear of rocks and cays nested inside reefs. A point inside one of those
+can select the wrong old feature.
 
 ## orphaned-identifiers
 
@@ -115,17 +107,18 @@ decision.
 The layer should eventually contain only deliberate removals. It is the closest of these checks to
 being worth halting on, and it could be made a blocking check once the list is stable.
 
-![Automatic linking only applies when the overlap is enough](figures/r1-orphaned-identifier.svg)
+![Overlap thresholds and control-point corrections](figures/r1-orphaned-identifier.svg)
 
-**Figure 2.** How an identifier is lost, and the two ways to recover it. In panel A the new
-mapping covers part of the old boundary, but the overlap is only about four per cent of the old
-reef and eight per cent of the new feature, so it is below the 0.1 threshold and no relationship
-is recorded. The old boundary is still deleted, because deletion is decided separately from
-lineage, and `NN-001` therefore appears in no `ReefID` and no `PrevReefID`. Panel B shows the fix
-where the new feature genuinely is the replacement: a `Move` point on the old feature, with the
-old `CODE` set on the replacement, so the official identifier is inherited. Panel C shows the fix
-where the relationship is real but partial: a `Link` point inside the overlap records the old
-identifier as previous without claiming the identity.
+**Figure 1.** Automatic linking and explicit corrections. Panel A qualifies because the shared
+area is at least ten per cent of either polygon; both shares need not pass. Automatic overlaps
+must also survive the sliver test. In panel B both shares are too low, so the old reef is deleted
+without its identifier passing on. Panels C and E show a `Move` point on the old reef with its
+`CODE` set on the replacement, with weak overlap and no overlap respectively. Panel D illustrates
+the `15-004a/b/c` merge. The dominant overlap supplies `ReefID = 15-004b`, while `15-004c`
+qualifies automatically as `PrevReefID`. A `Link` point inside the weak overlap adds `15-004a`
+to `PrevReefID`, shown in green, without changing `ReefID`. Its bars measure the overlap with
+`15-004a`. Panel F shows deliberate removal without a successor. Boundaries are schematic;
+the other inheritance examples assume one old identifier and one successor.
 
 ## sub-threshold-overlaps
 
@@ -147,7 +140,7 @@ rather than assumed.
 
 ![Examples of reefs just touching that are not automatically linked](figures/r2-sub-threshold-overlaps.svg)
 
-**Figure 3.** The three situations these records come from. Both shares are below 0.1 in every
+**Figure 2.** The three situations these records come from. Both shares are below 0.1 in every
 case, so no reef identifier is carried across automatically. In panel A a large reef mapped in two
 parts has had its internal division redrawn by eye, and on a reef this large the offset is too
 wide to be caught by the sliver test. In panel B two neighbouring fringing reefs have been remapped

@@ -11,6 +11,55 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Notes
 
+### 2026-11-11
+Just as I was preparing the map for the front cover of the technical report. I noticed that the classification for some of the reefs around the Keppel Islands was incorrect. Miall (Ma-ma-lon-bi) Reef (23-009) was incorrected labelled as a sand bank. The reef boundaries were correct, just the classification was wrong. I fixed the classification and review the dataset for an additional 30 min for other classification errors. We added some small fringing rocky around Great Keppel Island. Also fixed up classifications of reefs in Shoalwater Bay where quite a few rocky reefs were mislabelled as coral reefs (Clara Island Reef, Osborn Reef, Pelican Rock Reef). Spent most of the time fixing up the classifications in Shoalwater Bay, and some time in norther GBR fixing up fringing reef classifications. There are likely to be more classification errors. 
+
+- Time: 1 hr 50 min 4717 features
+
+### 2026-11-06
+Looking at the near final maps I noticed a few coral reefs in Broad Sound, a highly turbid environment that doesn't have coral reefs. The main feature I noticed was Booerang Shoals. I then created a larger that shows features that were being mapped through from the GBR features dataset inside the inshore-extent. All these features needed, as a minimum, their classifications checked. While fixing up these features I took the opportunity to make some maps to described some of the process used to map the features.
+
+- Time: 4 hr Reef Edit 4676 features
+- TIme: 1 hr 20 min Reef Edit 4710 features
+
+### 2026-11-02
+Been fixing up some of the features on the western edge of Badu. There are multiple legacy mapped `Fringing Terrestrial Reef` features that were flagged as creating a split legacy feature. Reviewing these features highlighted that there are some fringing reefs in these areas. We split these out from `Fringing Terrestial Reef`. The problem is the handling of the crosswalk from `Fringing Terrstrial Reef` to `RB_Type_L3` classification. At the moment the cross walk is to `Intertial Sediment`. The problem is that the `Fringing Terrestrial Reef` covers shallow sediment areas that are deeper than the intertidal zone. This means that when we were remapping these features there was a tension between modifying the features heavily, but making them more aligned with just the intertidal zone, or retaining the original intent of the feature. Part of it is that we need to further develop how the intertidal and shallow sediment regions are handled. The Torres Strait is the only region where there are some intertidal sediment areas mapped, however the original mapping of these features included subtidal features. The sediment mapping is out of scope of the project and so we will not resolve this tension now. Where I remapped features I focused on bringing in the boundaries of the `Fringing Terrestrial Reef` features to the depth edge indicated by the Red channel, where the brightness was fairly high. This likely corresponds to a depth of ~ -1.5 m MSL (according to MultiRes-Bathy-EEZ_2024). This is close to the intertidal zone, however not much care has been made to precisely quantify these edges. I would imagine that when we do the intertidal / shallow sediment mapping we will need to redo all of the Torres Strait `Terrestrial Fringing Reef` features.
+
+
+### 2026-11-01
+Worked on fixing up features flagged by legacy-land-splits.shps, created by 02d-clip-TS-GBR-legacy.py. There are 13 split parents. So far these correspond to features in Torres Strait, particularly Terrestrial Reefs, i.e. Intertidal Sediment that is now split by a small head land, or rocky feature. In all cases the process was that we copy and pasted original feature into the Reef Edit shapefile and then fixed up the problematic area. In many cases the problematic feature was neighbouring or touching other features that also showed significant boundary errors. For this reason the number of edited features was more than the number of split parts. Each edit led to a small regional improvement. Where a feature was copied over the entire boundary was adjusted to align with the latest imagery.
+
+Also explicitly removed features that are now over land. One 20-065c is a coral reef wedged between two rocks (not a real feature), and Bluff Rock (23-011), which is actually an Island. 
+
+- Time: 47 min Reef Edit 4631 features
+- Time: 45 min Reef Edit 4650 features
+
+
+### 2026-10-31
+Resolving reefs that were split by land clipping. This involved manually review 69 features flagged by `01e-clip-TS-GBR-reef-edit.py`. These were typically due to small slivers interacting with the undulations of the land mask. In some cases it corresponded to thin fringing rocky reefs that were digitised too small and close to the coast resulting in them being broken up into multiple pieces. This also happend when a reef was digitised as a single feature for two sides of an island. The island would split the reef. In these cases we fixed up the boundary and for island splits we made them explicit. We also discovered an edge case where we needed to add an exclusion. For Picnic Bay the pier splits the reef in two. This reef continues underneath the pier and so we added `in/Land-exclusion/Land-exclusion-piers.shp` to mark areas from the land mask that should be removed from the mask prior to using the mask to trim the reefs.
+
+- Time: 2 hours 4612 features. 
+
+Working on resolving the working\02\legacy-land-splits.shp. There are 34 split parts. I have resolved  7 of them. In each case there have required remapping around islands in the Torres Strait. Quite a lot of these features correspond to `Terrestrial Reefs` which in the Torres Strait get mapped through to `Intertidal Sediment` in the RB_Type_L3 v0.4. The issue is that we have not developed a complete intertidal mapping and so we are mapping through features to a class that is only partial. It is moderately complete in the Torres Strait, however, it is not everywhere else. 
+
+3 legacy features with no marine part of at least 100 m² (land-only or below mapping resolution):
+  src_row 461  TS Features  ReefFID=09-306a
+  src_row 3840  GBR Features  ReefFID=20-065c
+  src_row 4506  GBR Features  ReefFID=23-011
+
+09-306a - Small rocky reef on the edge of an island in the Torres Strait where the island is offset from its true position to the point where the feature is all on land. We redrew the rocky reefs around the island.
+20-065c - Tiny reef between the landland and a rocky island. There is only a gap of about 10 m. Most of this gap is now covered by the new coastline mapping, hence the reason for this removal.
+23-011 - This is Bluff Rock, which is really an island, hence the reason it is inside the island boundary. We are going to need to do a separate project on preparing all the island features.
+
+- Time: 51 min 4623 features.
+
+### 2026-10-31
+Implemented coastline trimming for the Torres Strait and GBR mapping using the Coastline50k landmask. The new [01e-clip-TS-GBR-reef-edit.py](01e-clip-TS-GBR-reef-edit.py) stage trims Reef Edit polygons before stage 02a assigns identifiers. Disconnected marine parts become separate records, with split-parent and split-part QA layers for review. Editing splits produce a warning to check the geometry and copied attributes, particularly `EdgeAcc_m` and `Attachment`. Stage 02a retains the run-specific `RE_row` and `RE_part` references for these records.
+
+The new [02d-clip-TS-GBR-legacy.py](02d-clip-TS-GBR-legacy.py) stage trims retained legacy features after stage 02a has applied replacements and removals. Singlepart trims keep their existing attributes and identifiers. Legacy splits and features with no retained marine remainder block publication and must be corrected through a Reef Edit replacement or explicit removal. Both clipping stages use shared operations in [reef_utils.py](reef_utils.py), process geometry in EPSG:4283 and remove clipping fragments smaller than 100 m² measured in EPSG:3577. Unchanged features and mapped cays are exempt from fragment filtering, and cay polygons are exempt from land subtraction. This preserves retained cays but does not correct their known mapping limitations. Invalid geometry and failed operations stop processing without automatic repair.
+
+Stage 03 now requires the accepted stage 02d output and removes the intermediate tracking fields. Its explicit development-only `--allow-review` option bypasses legacy coastline trimming, reads the raw stage 02a output and writes only to `working/03-review`; these outputs are not for publication. The production sequence is now stages 01d, 01e, 02a and 02d before stage 03, with stages 02b and 02c remaining independent regional preparation steps. Rerun stages 01e, 02a and 02d after source corrections or coastline changes. Implementation does not mean that outstanding source geometry and split-review issues have been resolved.
+
 ### 2026-10-29
 Corrected the area calculation projection in `06-crosswalk.py` and `A01-summary-stats.py` from EPSG:3112 (GDA94 / Geoscience Australia Lambert, a conformal projection) to EPSG:3577 (GDA94 / Australian Albers, an equal-area projection). This changes the published `Area_km2` values and the summary areas used in the technical report, without changing feature geometry or classifications. Existing outputs must be regenerated by running stage 06 followed by A01.
 

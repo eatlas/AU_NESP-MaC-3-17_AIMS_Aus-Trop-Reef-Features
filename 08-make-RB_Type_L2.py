@@ -3,10 +3,13 @@
 Adapted from NW-Aus-Features 13-make-RB_Type_L2.py. Read the output of stage
 06, clean and dissolve by RB_Type_L2, and retain the NW attribute priorities.
 The output uses EPSG:4283; areas are calculated in EPSG:3577.
+DEM percentiles are recalculated over dissolved polygons using the stage 05
+processing. Aggregated DepthCat and DepthCatSr remain independent of the DEM.
 
-National identifiers do not follow the NW suffix scheme. Each polygon receives
-an L2FID, linked to unchanged source ReefID and ReefFID values in a membership
-CSV. L2FID is local to this output, not a persistent reef identifier.
+National identifiers do not follow the NW suffix scheme. Each polygon retains
+source identifiers, datasets and primary sovereigns as semicolon-separated
+attributes. NW identifier suffixes use lossless grouped range notation.
+L2FID is local to this output, not a persistent reef identifier.
 
 These are dissolved L2 polygons, not countable reefs. A05 subsequently applies
 the 100 m separation and minimum effective-width rules.
@@ -14,11 +17,18 @@ the 100 m separation and minimum effective-width rules.
 
 import configparser
 from pathlib import Path
+import re
 
 import geopandas as gpd
 import pandas as pd
 
-from reef_utils import dissolve_to_l2_components
+from reef_utils import (
+    DEM_FIELDS,
+    LPTLookup,
+    calculate_depth_statistics,
+    dissolve_to_l2_components,
+    prepare_depth_rasters,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -26,20 +36,26 @@ config = configparser.ConfigParser()
 config.read(ROOT / "config.ini")
 VERSION = config.get("general", "version")
 DATA_DIR = ROOT / "data" / VERSION
+DOWNLOAD_PATH = ROOT / config.get("general", "in_3p_path")
+MULTIRES_VRT = ROOT / "working" / VERSION / "05" / "MultiRes-Bathy-EEZ_2024.vrt"
+LPT_TIF = (DOWNLOAD_PATH / "EOT20-tides" /
+           "AU_AIMS_EOT20-tide-stats_LPT_2021-01-2025-12.tif")
 INPUT_SHP = (DATA_DIR / "out" / "full-classes" /
              f"AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_{VERSION}.shp")
 OUTPUT_SHP = (DATA_DIR / "out" / "simp-classes" /
               f"AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_L2_{VERSION}.shp")
-MEMBERS_CSV = OUTPUT_SHP.with_name(f"{OUTPUT_SHP.stem}_members.csv")
 MULTI_ATTACHMENT_SHP = ROOT / "working" / VERSION / "08" / "multi-attachment-values.shp"
 ATTACHMENTS = ["Land", "Fringing", "Oceanic", "Isolated"]
 DEPTH_ORDER = ["Land", "Surface", "Intertidal", "Very Shallow", "Shallow", "Deep"]
 CONFIDENCE_ORDER = ["Very Low", "Low", "Medium", "High"]
 ENUMS = {"Attachment": ATTACHMENTS, "DepthCat": DEPTH_ORDER}
 CONFIDENCE_FIELDS = ("FeatConf", "TypeConf")
+IDENTIFIER_FIELDS = ("ReefFID", "ReefID", "PrevReefID")
+SOURCE_LIST_FIELDS = (*IDENTIFIER_FIELDS, "Dataset", "Sovereign1")
+NW_ID_BASE = r"R-[0-9]{4}-[0-9]{3,}"
 CONFIDENCE_QA_CSV = ROOT / "working" / VERSION / "08" / "confidence-issues.csv"
-OUTPUT_COLUMNS = ["L2FID", "RB_Type_L2", "RB_L3_Agg", "Attachment", "DepthCat",
-                  "DepthCatSr", "FeatConf", "TypeConf", "EdgeSrc", "EdgeAcc_m",
+OUTPUT_COLUMNS = ["L2FID", *SOURCE_LIST_FIELDS, "RB_Type_L2", "RB_L3_Agg", "Attachment", "DepthCat",
+                  "DepthCatSr", *DEM_FIELDS, "FeatConf", "TypeConf", "EdgeSrc", "EdgeAcc_m",
                   "Area_km2", "geometry"]
 
 
@@ -49,7 +65,68 @@ def unique_nonempty(values):
 
 
 def join_semicolon(values):
-    return ";".join(unique_nonempty(values))
+    return ";".join(sorted({item.strip() for value in unique_nonempty(values)
+                            for item in value.split(";") if item.strip()}))
+
+
+def encode_identifier_list(values):
+    """Losslessly group NW suffixes, retaining literals when grouping is longer."""
+    identifiers = unique_nonempty(join_semicolon(values).split(";"))
+    groups, literals = {}, []
+    for identifier in identifiers:
+        if "{" in identifier or "}" in identifier:
+            raise ValueError(f"Source identifier contains reserved braces: {identifier!r}")
+        match = re.fullmatch(rf"({NW_ID_BASE})([a-z]+)", identifier)
+        if match:
+            base, suffix = match.groups()
+            groups.setdefault(base, []).append(suffix)
+        else:
+            literals.append(identifier)
+    for base, suffixes in groups.items():
+        suffixes.sort(key=lambda suffix: (len(suffix), suffix))
+        start = end = suffixes[0]
+        runs = []
+        for suffix in suffixes[1:]:
+            if suffix[:-1] == end[:-1] and ord(suffix[-1]) == ord(end[-1]) + 1:
+                end = suffix
+            else:
+                runs.append(start if start == end else f"{start}-{end}")
+                start = end = suffix
+        runs.append(start if start == end else f"{start}-{end}")
+        encoded = base + "{" + ",".join(runs) + "}"
+        originals = [base + suffix for suffix in suffixes]
+        if len(encoded.encode("utf-8")) < len(";".join(originals).encode("utf-8")):
+            literals.append(encoded)
+        else:
+            literals.extend(originals)
+    return ";".join(sorted(literals))
+
+
+def expand_identifier_list(value):
+    """Expand grouped NW identifiers to a sorted unique list; reject invalid notation."""
+    identifiers = set()
+    for token in unique_nonempty(value.split(";")):
+        if "{" not in token and "}" not in token:
+            identifiers.add(token)
+            continue
+        match = re.fullmatch(rf"({NW_ID_BASE})\{{([^{{}}]+)\}}", token)
+        if not match:
+            raise ValueError(f"Malformed identifier group: {token!r}")
+        base, contents = match.groups()
+        for item in contents.split(","):
+            suffix = re.fullmatch(r"([a-z]+)(?:-([a-z]+))?", item)
+            if not suffix:
+                raise ValueError(f"Malformed identifier suffix: {item!r}")
+            start, end = suffix.groups()
+            if end is None:
+                identifiers.add(base + start)
+            else:
+                # Ranges vary only the final letter, so az-ba is not a valid range.
+                if start[:-1] != end[:-1] or start[-1] >= end[-1]:
+                    raise ValueError(f"Invalid identifier suffix range: {item!r}")
+                identifiers.update(base + start[:-1] + chr(letter)
+                                   for letter in range(ord(start[-1]), ord(end[-1]) + 1))
+    return sorted(identifiers)
 
 
 def choose_priority(values, priority):
@@ -60,7 +137,7 @@ def choose_priority(values, priority):
 def prepare_features(gdf):
     """Validate national attributes and prepare singlepart source geometries."""
     required = {"RB_Type_L2", "RB_Type_L3", "DepthCatSr", "EdgeSrc", "EdgeAcc_m",
-                "ReefID", "ReefFID", "geometry"} | set(ENUMS) | set(CONFIDENCE_FIELDS)
+                "geometry"} | set(SOURCE_LIST_FIELDS) | set(ENUMS) | set(CONFIDENCE_FIELDS)
     missing = required - set(gdf.columns)
     if missing:
         raise ValueError(f"Missing input fields: {sorted(missing)}")
@@ -90,13 +167,17 @@ def prepare_features(gdf):
 
 
 def dissolve_by_l2(gdf):
-    """Aggregate attributes and retain every source-to-component membership."""
+    """Aggregate attributes, including source lists, for each L2 component."""
     components = dissolve_to_l2_components(gdf)
-    rows, members = [], []
+    print(f"Aggregating attributes for {len(components)} L2 components...", flush=True)
+    rows = []
     for l2fid, component in enumerate(components, start=1):
         group = gdf.loc[component["member_indices"]].drop_duplicates("SourceRow")
         rows.append({
             "L2FID": l2fid, "RB_Type_L2": component["l2_class"],
+            **{field: encode_identifier_list(group[field]) for field in IDENTIFIER_FIELDS},
+            "Dataset": join_semicolon(group["Dataset"]),
+            "Sovereign1": join_semicolon(group["Sovereign1"]),
             "RB_L3_Agg": join_semicolon(group["RB_Type_L3"]),
             "Attachment": choose_priority(group["Attachment"], ATTACHMENTS),
             "AttSet": join_semicolon(group["Attachment"]),
@@ -108,13 +189,12 @@ def dissolve_by_l2(gdf):
             "EdgeAcc_m": int(group["EdgeAcc_m"].max()),
             "geometry": component["geometry"],
         })
-        for source in group.itertuples(index=False):
-            members.append({"L2FID": l2fid, "SourceRow": source.SourceRow,
-                            "ReefID": source.ReefID, "ReefFID": source.ReefFID,
-                            "FeatConf": source.FeatConf, "TypeConf": source.TypeConf})
+        if l2fid % 1000 == 0 or l2fid == len(components):
+            print(f"  Aggregating attributes: {l2fid}/{len(components)}", flush=True)
+    print("Calculating L2 polygon areas...", flush=True)
     singleparts = gpd.GeoDataFrame(rows, crs=gdf.crs)
     singleparts["Area_km2"] = (singleparts.to_crs(3577).geometry.area / 1e6).round(4)
-    return singleparts, pd.DataFrame(members)
+    return singleparts
 
 
 def aggregate_confidence(values):
@@ -138,10 +218,27 @@ def confidence_issues(features):
 
 def validate_text_lengths(gdf):
     """Reject text overflow rather than silently truncating aggregated attributes."""
+    issues = []
     for field in gdf.select_dtypes(include=["object", "string"]).columns:
         lengths = gdf[field].fillna("").astype(str).str.encode("utf-8").str.len()
-        if (lengths > 254).any():
-            raise ValueError(f"{field} exceeds the shapefile text limit of 254 bytes")
+        overflow = lengths > 254
+        if overflow.any():
+            details = []
+            for index, row in gdf.loc[overflow].head(10).iterrows():
+                identifier = (f"L2FID={row['L2FID']}" if "L2FID" in gdf.columns
+                              else f"row={index}")
+                l2_class = (f", RB_Type_L2={row['RB_Type_L2']!r}"
+                            if "RB_Type_L2" in gdf.columns else "")
+                count = (len(expand_identifier_list(str(row[field])))
+                         if field in IDENTIFIER_FIELDS
+                         else len(unique_nonempty(str(row[field]).split(";"))))
+                details.append(f"{identifier}{l2_class}, {lengths.loc[index]} bytes, "
+                               f"{count} unique values")
+            issues.append(f"{field} exceeds the shapefile text limit of 254 bytes "
+                          f"in {int(overflow.sum())} features; first 10: "
+                          + "; ".join(details))
+    if issues:
+        raise ValueError("\n".join(issues))
 
 
 def main():
@@ -155,18 +252,21 @@ def main():
               f"cleanup; see {CONFIDENCE_QA_CSV}. Affected L2 confidence is blank.",
               flush=True)
     print(f"Dissolving {len(features)} source parts by RB_Type_L2", flush=True)
-    singleparts, members = dissolve_by_l2(features)
+    singleparts = dissolve_by_l2(features)
+    validate_text_lengths(singleparts)
+    rasters = prepare_depth_rasters(DOWNLOAD_PATH, MULTIRES_VRT)
+    lpt_lookup = LPTLookup(LPT_TIF)
+    singleparts[list(DEM_FIELDS)] = calculate_depth_statistics(
+        singleparts, rasters, lpt_lookup)
     multi = singleparts[singleparts["AttSet"].str.contains(";")]
     validate_text_lengths(singleparts)
     OUTPUT_SHP.parent.mkdir(parents=True, exist_ok=True)
     singleparts[OUTPUT_COLUMNS].to_file(OUTPUT_SHP, encoding="UTF-8")
-    members.to_csv(MEMBERS_CSV, index=False)
     # Always replace the QA layer, including an empty layer on a clean rerun.
     MULTI_ATTACHMENT_SHP.parent.mkdir(parents=True, exist_ok=True)
     multi[OUTPUT_COLUMNS[:-1] + ["AttSet", "geometry"]].to_file(
         MULTI_ATTACHMENT_SHP, encoding="UTF-8")
     print(f"Wrote {len(singleparts)} L2 polygons: {OUTPUT_SHP}", flush=True)
-    print(f"Wrote source memberships: {MEMBERS_CSV}", flush=True)
     print(f"Wrote {len(multi)} mixed-attachment QA polygons: {MULTI_ATTACHMENT_SHP}",
           flush=True)
 

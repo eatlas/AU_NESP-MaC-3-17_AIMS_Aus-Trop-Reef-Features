@@ -48,9 +48,10 @@ print("Starting script to add country attributes to reef features...")
 config = configparser.ConfigParser()
 config.read('config.ini')
 in_3p_path = config['general']['in_3p_path']
+version = config.get('general', 'version')
 
 # Define paths
-reef_features_path = "working/03/TS-GBR-CS-NW-Features.shp"
+reef_features_path = os.path.join("working", version, "03", "TS-GBR-CS-NW-Features.shp")
 country_eez_dir = os.path.join(in_3p_path, "EEZ-land-union_2024")
 country_eez_path = os.path.join(country_eez_dir, "EEZ_land_union_v4_202410.shp")
 
@@ -225,7 +226,7 @@ for i, reef in tqdm(reef_features.iterrows(), total=len(reef_features)):
             reef_features.at[i, 'Union'] = ";".join(union_values)
 
 # Save the updated shapefile
-output_path = "working/04/TS-GBR-CS-NW-Features-Country.shp"
+output_path = os.path.join("working", version, "04", "TS-GBR-CS-NW-Features-Country.shp")
 os.makedirs(os.path.dirname(output_path), exist_ok=True)
 reef_features.to_file(output_path)
 

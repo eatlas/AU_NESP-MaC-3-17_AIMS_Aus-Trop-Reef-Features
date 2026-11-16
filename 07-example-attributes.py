@@ -10,14 +10,14 @@ Purpose:
 Details:
     - Reads the versioned shapefile produced by the crosswalk/enrichment process.
     - Randomly selects a fixed number of features (default: 10, configurable).
-    - Exports all attribute columns (except geometry) to a CSV file in the working/07 directory.
+    - Exports all attribute columns (except geometry) to a CSV file in working/{version}/07.
     - Uses a fixed random seed for reproducibility.
 
 Inputs:
     - data/{version}/out/full-classes/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_{version}.shp
 
 Outputs:
-    - working/07/TS-GBR-CS-NW-Features_{version}_subset.csv
+    - working/{version}/07/TS-GBR-CS-NW-Features_{version}_subset.csv
 
 Intended Use:
     - To provide example attribute tables for documentation and user guidance.
@@ -38,7 +38,8 @@ version = config.get('general', 'version')
 
 # Input and output paths
 input_shp = f'data/{version}/out/full-classes/AU_NESP-MaC-3-17_AIMS_Aus-Trop-Reef-Features_{version}.shp'
-output_csv = f"working/07/TS-GBR-CS-NW-Features_{version}_subset.csv"
+output_csv = os.path.join("working", version, "07",
+                          f"TS-GBR-CS-NW-Features_{version}_subset.csv")
 
 def main():
     print(f"Reading shapefile: {input_shp}")

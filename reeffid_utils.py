@@ -1,4 +1,36 @@
-"""Utilities for allocating stable, unique reef feature identifiers."""
+"""Allocate dataset polygon identifiers without changing official reef identifiers.
+
+An official ``ReefID`` is not necessarily unique per polygon. For example, a reef
+and its associated rock or cay can share the same source identifier. ``ReefFID``
+distinguishes individual features in the national dataset, while ``ReefID`` keeps
+the authority's identifier unchanged. A shared allocator is needed to resolve
+these legitimate duplicates and enforce non-null, unique feature identifiers
+across the combined regional inputs.
+
+``03-merge-TS-GBR-CS-NW.py`` calls ``allocate_reeffids`` after concatenating the
+Torres Strait/Great Barrier Reef, Coral Sea and north/west Australian features,
+before writing the merged shapefile. Stage 02a supplies inherited official IDs
+or provisional ``PROV-{lat}-{lon}`` feature IDs. Stages 02b and 02c retain existing
+feature IDs, leaving first allocation to stage 03.
+
+Allocation fills missing feature IDs from official IDs and uses ``-F01``,
+``-F02``, etc. to distinguish polygons sharing an ID. These suffixes belong only
+to ``ReefFID``; they are not new official reef identifiers. Existing unique
+feature IDs are retained where possible, and remaining collisions are resolved
+across the whole input. Features without an official ID must already have a
+provisional feature ID; this module does not generate provisional IDs or decide
+which features inherit official IDs.
+
+Suffix ordering uses source attributes, centroid, area and a geometry hash
+rather than input row order. Reproducibility assumes unchanged attributes and
+geometry; regeneration is not a verified cross-release feature match. Carry
+published ``ReefFID`` values forward on updates instead of relying on allocation
+to recognise edited features.
+
+The allocator returns a copy and raises ``ValueError`` for missing identifiers,
+duplicated published feature IDs within an official-ID group, or any remaining
+non-unique feature IDs. It performs no file I/O.
+"""
 
 import hashlib
 

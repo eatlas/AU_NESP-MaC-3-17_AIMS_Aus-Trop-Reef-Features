@@ -3,9 +3,16 @@
 Merges three shapefiles (CS-Features, TS-GBR-Features, NW-Aus-Features) into one output shapefile.
 All shapefiles are in EPSG:4283. The resulting shapefile has attributes corresponding to the 
 superset of the attributes from the input shapefiles.
+
+The TS-GBR input is the coastline-clipped output of 02d-clip-TS-GBR-legacy.py.
+--allow-review (development only) reads the raw stage 02a output instead and
+writes to working/{version}/03-review.
 """
 
+import argparse
+import configparser
 import os
+import sys
 import geopandas as gpd
 import pandas as pd
 from crosswalk_utils import load_crosswalk, validate_features
@@ -14,6 +21,9 @@ from reeffid_utils import allocate_reeffids
 # Wrapper applied to ReefLabel when the label comes from PrevReefID rather than
 # ReefID. Set to '{ids}' to show former identifiers without any marking.
 PREV_LABEL_FORMAT = '[{ids}]'
+
+# Intermediate tracking fields added by stage 01e, never published
+TRACKING_FIELDS = ['RE_row', 'RE_part']
 
 
 def build_reef_label(reef_id, prev_reef_id):
@@ -28,15 +38,38 @@ def build_reef_label(reef_id, prev_reef_id):
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        '--allow-review', action='store_true',
+        help='Development only: read the raw stage 02a output (bypassing the stage '
+             '02d legacy coastline gate) and write to working/{version}/03-review.')
+    args = parser.parse_args()
 
-    
     # Define input and output paths
-    cs_features_path = 'working/02/CS-Features-patched.shp'
-    ts_gbr_features_path = 'working/02/TS-GBR-Features-patched.shp'
-    nw_aus_features_path = 'working/02/NW-Aus-Features-patched.shp'
-    
-    # Create output directory if it doesn't exist
-    output_dir = 'working/03'
+    config = configparser.ConfigParser()
+    config.read('config.ini')
+    version = config.get('general', 'version')
+    working_dir = os.path.join('working', version)
+    cs_features_path = os.path.join(working_dir, '02', 'CS-Features-patched.shp')
+    nw_aus_features_path = os.path.join(working_dir, '02', 'NW-Aus-Features-patched.shp')
+    if args.allow_review:
+        ts_gbr_features_path = os.path.join(working_dir, '02', 'TS-GBR-Features-patched.shp')
+        output_dir = os.path.join(working_dir, '03-review')
+        print("!" * 78)
+        print("WARNING: --allow-review. Legacy coastline correction (stage 02d) has been")
+        print(f"bypassed. Output in {output_dir} is NOT for publication.")
+        print("!" * 78)
+    else:
+        ts_gbr_features_path = os.path.join(working_dir, '02', 'TS-GBR-Features-clipped.shp')
+        output_dir = os.path.join(working_dir, '03')
+
+    for path in (cs_features_path, ts_gbr_features_path, nw_aus_features_path):
+        if not os.path.exists(path):
+            print(f"ERROR: Input not found: {path}")
+            if path == ts_gbr_features_path and not args.allow_review:
+                print("  Run 02d-clip-TS-GBR-legacy.py and resolve any blocking cases.")
+            sys.exit(1)
+
     os.makedirs(output_dir, exist_ok=True)
     output_path = os.path.join(output_dir, 'TS-GBR-CS-NW-Features.shp')
     
@@ -45,6 +78,8 @@ def main():
     cs_gdf = gpd.read_file(cs_features_path)
     ts_gbr_gdf = gpd.read_file(ts_gbr_features_path)
     nw_aus_gdf = gpd.read_file(nw_aus_features_path)
+    # Stage 01e tracking fields are intermediate only
+    ts_gbr_gdf = ts_gbr_gdf.drop(columns=[c for c in TRACKING_FIELDS if c in ts_gbr_gdf.columns])
     
     # Print information about input datasets
     print(f"CS-Features: {len(cs_gdf)} features")

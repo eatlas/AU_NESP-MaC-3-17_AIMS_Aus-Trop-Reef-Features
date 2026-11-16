@@ -17,6 +17,7 @@ def main(perform_clipping=False):
     # Read configuration
     config = configparser.ConfigParser()
     config.read('config.ini')
+    version = config.get('general', 'version')
     in_3p_path = config['general']['in_3p_path']
     nw_aus_feat_version = config['general']['nw_aus_feat_version']
     
@@ -24,7 +25,7 @@ def main(perform_clipping=False):
     input_file = os.path.join(in_3p_path, f'NW-Aus-Feat_{nw_aus_feat_version}', 'out', 'full-classes',
                              f'AU_NESP-MaC-3-17_AIMS_NW-Aus-Features_L3_{nw_aus_feat_version}.shp')
     
-    output_dir = 'working/02'
+    output_dir = os.path.join('working', version, '02')
     output_file = os.path.join(output_dir, 'NW-Aus-Features-patched.shp')
     
     # Create output directory if it doesn't exist

@@ -9,6 +9,7 @@ Patches the Coral Sea Features shapefile by:
 5. Converting the Atoll Platforms dataset into features by removing areas overlapping with reefs (i.e., cutting out reefs from platforms, leaving non-overlapping platform features)
 6. Translating Coral Sea RB_Type_L3 from v0-3 to v0-4 using CS_RB_Type_L3_v0-3 in the crosswalk table after merging
 7. Standardising 'Very high' and 'High' to 'High' in FeatConf and TypeConf
+8. Removing sub-0.2 m platform slivers with a 0.1 m inward/outward buffer
 
 See 02c-patch-CS-Features-spec.md for inputs, processing and outputs.
 """
@@ -18,11 +19,13 @@ import geopandas as gpd
 import configparser
 from pathlib import Path
 import pandas as pd
+from shapely.validation import explain_validity
 
 # --- File path constants (set after config is loaded) ---
 CONFIG_PATH = 'config.ini'
-OUTPUT_DIR = 'working/02'
 OUTPUT_FILENAME = 'CS-Features-patched.shp'
+PLATFORM_BUFFER_M = 0.01
+PLATFORM_METRIC_CRS = 3577
 
 def get_filepaths():
     config = configparser.ConfigParser()
@@ -39,7 +42,8 @@ def get_filepaths():
     rb_type_lut_path = os.path.join(
         in_3p_path, f"NW-Aus-Feat_{nw_aus_feat_version}", "in", "RB_Type_L3_crosswalk.csv"
     )
-    output_path = os.path.join(OUTPUT_DIR, OUTPUT_FILENAME)
+    output_dir = os.path.join('working', config.get('general', 'version'), '02')
+    output_path = os.path.join(output_dir, OUTPUT_FILENAME)
     return cs_reefs_features_path, cs_platforms_features_path, rb_type_lut_path, output_path
 
 def process_features(gdf, dataset_name):
@@ -99,6 +103,33 @@ def load_rb_type_crosswalk(csv_path):
     print(f"Loaded {len(lut)} CS_RB_Type_L3_v0-3 to RB_Type_L3_v0-4 mappings")
     return lut
 
+def validate_polygons(gdf, stage):
+    """Block invalid or missing polygon geometry, including after file writing."""
+    bad = (
+        gdf.geometry.isna() | gdf.geometry.is_empty | ~gdf.geometry.is_valid
+        | ~gdf.geom_type.isin(('Polygon', 'MultiPolygon'))
+    )
+    if bad.any():
+        for index, row in gdf.loc[bad].iterrows():
+            print(f"ERROR: {stage}, row {index}, ReefID={row.get('ReefID', '')}, "
+                  f"ReefFID={row.get('ReefFID', '')}: "
+                  f"{explain_validity(row.geometry)}")
+        raise ValueError(f"{stage}: {int(bad.sum())} invalid, empty or non-polygon geometries")
+
+def clean_platform_slivers(platforms):
+    """Apply a metric opening only to the reef-subtracted platform polygons."""
+    print(f"Cleaning platform slivers with -{PLATFORM_BUFFER_M} m then "
+          f"+{PLATFORM_BUFFER_M} m buffers in EPSG:{PLATFORM_METRIC_CRS}...")
+    metric = platforms.to_crs(epsg=PLATFORM_METRIC_CRS)
+    cleaned = metric.geometry.buffer(-PLATFORM_BUFFER_M).buffer(PLATFORM_BUFFER_M)
+    result = metric.copy()
+    result.geometry = cleaned
+    validate_polygons(result, 'Platform buffer cleanup')
+    print(f"  Net platform area removed: {metric.geometry.area.sum() - cleaned.area.sum():.3f} m2")
+    result = result.to_crs(platforms.crs)
+    validate_polygons(result, 'Platform cleanup in source CRS')
+    return result
+
 def main():
     # Get file paths
     cs_reefs_features_path, cs_platforms_features_path, rb_type_lut_path, output_path = get_filepaths()
@@ -132,6 +163,8 @@ def main():
     cs_platforms_gdf = cs_platforms_gdf[~cs_platforms_gdf.geometry.is_empty]
     if original_count != len(cs_platforms_gdf):
         print(f"Removed {original_count - len(cs_platforms_gdf)} empty geometries")
+
+    cs_platforms_gdf = clean_platform_slivers(cs_platforms_gdf)
     
     # Merge the two geodataframes
     print("Merging datasets...")
@@ -175,13 +208,15 @@ def main():
     # Reproject to EPSG:4283 before saving
     print("Reprojecting output to EPSG:4283...")
     merged_gdf = merged_gdf.to_crs(epsg=4283)
+    validate_polygons(merged_gdf, 'Patched output in EPSG:4283')
 
     # Create output directory if it doesn't exist
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
 
     # Save the patched shapefile
     print(f"Saving patched shapefile to: {output_path}")
     merged_gdf.to_file(output_path)
+    validate_polygons(gpd.read_file(output_path), 'Written patched shapefile')
     print("Patching completed successfully.")
 
 if __name__ == "__main__":

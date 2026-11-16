@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="160mm" height="192.711mm" viewBox="0 0 900 1084" role="img" aria-labelledby="title description">
+<title id="title">Creation of the Australian Tropical Reef Features dataset</title>
+<desc id="description">Regional mapping is combined, enriched and published as full and simplified classification products. The dotted GBR + TS update is expanded in the companion figure.</desc>
+<rect x="448" y="8" width="436" height="240" rx="10" fill="none" stroke="#354054" stroke-width="1.5" stroke-dasharray="2,5"/>
+<text x="464" y="34" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="start">GBR + TS update</text>
+<g data-source="nw" data-target="nw_prepare">
+<polyline points="119,116 119,156" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="119,156 114,146 124,146" fill="#8CB6D6"/>
+</g>
+<g data-source="cs" data-target="cs_prepare">
+<polyline points="337,116 337,156" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="337,156 332,146 342,146" fill="#8CB6D6"/>
+</g>
+<g data-source="gbr_ts" data-target="update">
+<polyline points="555,116 555,156" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="555,156 550,146 560,146" fill="#8CB6D6"/>
+</g>
+<g data-source="edits" data-target="update">
+<polyline points="773,116 773,156" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="773,156 768,146 778,146" fill="#8CB6D6"/>
+</g>
+<g data-source="nw_prepare" data-target="merge">
+<polyline points="119,232 119,280" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="119,280 114,270 124,270" fill="#8CB6D6"/>
+</g>
+<g data-source="cs_prepare" data-target="merge">
+<polyline points="337,232 337,280" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="337,280 332,270 342,270" fill="#8CB6D6"/>
+</g>
+<g data-source="update" data-target="merge">
+<polyline points="664,232 664,280" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="664,280 659,270 669,270" fill="#8CB6D6"/>
+</g>
+<g data-source="merge" data-target="sovereignty">
+<polyline points="450,340 450,380" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="450,380 445,370 455,370" fill="#8CB6D6"/>
+</g>
+<g data-source="country" data-target="sovereignty">
+<polyline points="228,410 255,410" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="255,410 245,415 245,405" fill="#8CB6D6"/>
+</g>
+<g data-source="sovereignty" data-target="depth">
+<polyline points="450,440 450,480" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="450,480 445,470 455,470" fill="#8CB6D6"/>
+</g>
+<g data-source="bathymetry" data-target="depth">
+<polyline points="126,664 126,518 255,518" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="255,518 245,523 245,513" fill="#8CB6D6"/>
+</g>
+<g data-source="depth" data-target="classifications">
+<polyline points="450,556 450,596" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="450,596 445,586 455,586" fill="#8CB6D6"/>
+</g>
+<g data-source="classifications" data-target="full">
+<polyline points="450,672 450,712" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="450,712 445,702 455,702" fill="#8CB6D6"/>
+</g>
+<g data-source="full" data-target="dissolve">
+<polyline points="450,808 450,848" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="450,848 445,838 455,838" fill="#8CB6D6"/>
+</g>
+<g data-source="bathymetry" data-target="dissolve">
+<polyline points="126,832 126,886 255,886" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="255,886 245,891 245,881" fill="#8CB6D6"/>
+</g>
+<g data-source="dissolve" data-target="simplified">
+<polyline points="450,924 450,964" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="450,964 445,954 455,954" fill="#8CB6D6"/>
+</g>
+<g id="nw">
+<rect x="24" y="52" width="190" height="64" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="119" y="77" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">North and West</text>
+<text x="119" y="103" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Australian Features</text>
+</g>
+<g id="cs">
+<rect x="242" y="52" width="190" height="64" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="337" y="90" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Coral Sea Features</text>
+</g>
+<g id="gbr_ts">
+<rect x="460" y="52" width="190" height="64" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="555" y="90" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">GBR + TS Features</text>
+</g>
+<g id="edits">
+<rect x="678" y="52" width="190" height="64" rx="4" fill="#FFF8ED" stroke="#C89600" stroke-width="1.5"/>
+<text x="773" y="90" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Reef Edits</text>
+</g>
+<g id="nw_prepare">
+<rect x="24" y="156" width="190" height="76" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="119" y="187" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Prepare</text>
+<text x="119" y="213" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">attributes</text>
+</g>
+<g id="cs_prepare">
+<rect x="242" y="156" width="190" height="76" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="337" y="187" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Combine reefs</text>
+<text x="337" y="213" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">and platforms</text>
+</g>
+<g id="update">
+<rect x="460" y="156" width="408" height="76" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="664" y="200" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Update GBR + TS mapping</text>
+</g>
+<g id="merge">
+<rect x="24" y="280" width="844" height="60" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="446" y="316" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Merge regional datasets</text>
+</g>
+<g id="sovereignty">
+<rect x="255" y="380" width="390" height="60" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="450" y="416" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Assign sovereignty</text>
+</g>
+<g id="country">
+<rect x="24" y="378" width="204" height="64" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="126" y="403" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Country + EEZ</text>
+<text x="126" y="429" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">union, 2024</text>
+</g>
+<g id="depth">
+<rect x="255" y="480" width="390" height="76" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="450" y="511" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Add depth statistics</text>
+<text x="450" y="537" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">and categories</text>
+</g>
+<g id="classifications">
+<rect x="255" y="596" width="390" height="76" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="450" y="627" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Add external classifications</text>
+<text x="450" y="653" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#FFFFFF" text-anchor="middle">NVCL / Seamap / Qld Wetlands</text>
+</g>
+<g id="full">
+<rect x="255" y="712" width="390" height="96" rx="4" fill="#FFF8ED" stroke="#C89600" stroke-width="1.5"/>
+<text x="450" y="753" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#005A9C" text-anchor="middle">Australian Tropical Reef Features</text>
+<text x="450" y="779" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Full classification (L3)</text>
+</g>
+<g id="dissolve">
+<rect x="255" y="848" width="390" height="76" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="450" y="879" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Dissolve by L2 class</text>
+<text x="450" y="905" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#FFFFFF" text-anchor="middle">Recalculate depth statistics</text>
+</g>
+<g id="simplified">
+<rect x="255" y="964" width="390" height="96" rx="4" fill="#FFF8ED" stroke="#C89600" stroke-width="1.5"/>
+<text x="450" y="1005" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#005A9C" text-anchor="middle">Australian Tropical Reef Features</text>
+<text x="450" y="1031" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Simplified classification (L2)</text>
+</g>
+<g id="bathymetry">
+<rect x="24" y="664" width="204" height="168" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="126" y="689" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">MultiRes-Bathy-</text>
+<text x="126" y="715" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">EEZ_2024</text>
+<text x="126" y="741" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">AusBathyTopo</text>
+<text x="126" y="767" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Australia 250 m 2024</text>
+<text x="126" y="793" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">(fallback)</text>
+<text x="126" y="819" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">EOT20 tides</text>
+</g>
+</svg>

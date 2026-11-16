@@ -9,6 +9,33 @@ or clip paths, so that the files import cleanly into PowerPoint for editing.
 World coordinates are metres. Areas are reported in km2.
 
 Run from the repository root. Writes to figures/.
+
+Each figure illustrates part of the identifier allocation in
+02a-patch-TS-GBR-Features.py (referred to below as "02a"). The docstring of
+each fig_* function is the figure's metadata, and the source for its caption:
+  Shows    what is drawn
+  When     the mapping situation in which the case arises
+  Why      why the method handles it this way
+  Code     where the concept lives in 02a, by Step heading, function, variable
+           or constant (names rather than line numbers, so they stay valid)
+  Used in  the document and figure number that embeds it
+s1-s6 are used in 02a-PrevReefID-solution.md and r1-r2 in
+02a-PrevReefID-review-guide.md. Some are also intended for the final report.
+
+Background common to all figures. Old features are the GBR Features (GBRMPA)
+polygons, whose LABEL_ID becomes ReefID. New features are the Reef Edit
+polygons, which are authoritative wherever they are drawn. Only GBRMPA can
+assign or reassign an official identifier, so the method passes ReefID across
+only when the case is strong, and otherwise records the association in
+PrevReefID ("part of this feature was previously known by this identifier"),
+which is a statement about history that can safely be made at a low threshold.
+
+Geometry is chosen so that applying the 02a rules to it gives the outcome
+shown (shares, sliver erosion, dominance ratio). Printed values on each run
+allow this to be checked. Identifiers are placeholders except in S4, where they
+are real cases cited in the solution document. If the 02a constants
+SLIVER_TOLERANCE_M (10 m), CANDIDATE_SHARE (0.1) or DOMINANCE_RATIO (3) change,
+the figures must be checked again.
 """
 
 import math
@@ -324,7 +351,26 @@ class Panel:
 # ---------------------------------------------------------------------------
 
 def fig_s1_shares():
-    fig = Fig(900, 360, "What share_old and share_new measure")
+    """S1: the two directional overlap shares.
+
+    Shows: one old reef and one new feature that partly overlap. The shared
+    area divided by each polygon's own area gives two different shares
+    (here share_old 0.09, share_new 0.18).
+    When: every intersecting old/new pair is scored this way. The shares
+    differ whenever the two polygons differ in size, which is common because
+    the remapping often splits large old reefs or absorbs small ones.
+    Why: a single symmetric score (intersection over union, used previously)
+    falls away whenever sizes differ, so a small fragment lying wholly inside
+    a large old reef, or a large new reef containing a small old one, scored
+    below threshold and the identifier was silently lost. Two shares let the
+    relationship be recognised from either side. The pair drawn is a candidate
+    because share_new passes 0.1 even though share_old does not.
+    Code: 02a score_pair() returns share_old and share_new, computed in
+    EPSG:3577 (equal area). Step 4 "Candidate relationships" keeps a pair when
+    max(share_old, share_new) >= CANDIDATE_SHARE.
+    Used in: 02a-PrevReefID-solution.md, figure 1.
+    """
+    fig =  Fig(900, 360, "What share_old and share_new measure")
 
     old = blob(0, 0, 1200, 800, seed=11)
     new = blob(1450, 300, 800, 620, seed=12)
@@ -365,7 +411,31 @@ def fig_s1_shares():
 # ---------------------------------------------------------------------------
 
 def fig_s2_sliver():
-    fig = Fig(900, 350, "Overlaps created by a redrawn division are rejected")
+    """S2: rejection of digitising slivers by erosion.
+
+    Shows: a reef mapped in two parts, remapped in two parts with the internal
+    division drawn about 14 m from its old position. The new left part
+    overlaps the old right part in a long thin strip (panel A), which vanishes
+    when eroded by 10 m (panel B), so the two unrelated halves are not linked.
+    When: whenever a reef is divided into parts, since the division is judged
+    by eye and cannot be retraced exactly. Coordinate precision and small
+    differences in boundary construction produce the same thin contacts.
+    Why: the strip shares 0.15 / 0.11 of the two polygons, enough to pass the
+    share test, so without this step the halves of one reef would record each
+    other as previous identifiers. Erosion measures how deeply the polygons
+    interpenetrate rather than how much area they share; area alone cannot
+    separate a long sliver on a large reef from a compact overlap on a small
+    one. The old right part is still deleted, because any intersection with
+    authoritative new mapping deletes the old feature, but that does not lose
+    its identifier, which passes to the new right part.
+    Code: 02a score_pair() 'survives' (intersection.buffer(-tolerance)),
+    SLIVER_TOLERANCE_M; pairs that do not survive are skipped in Step 4
+    "Candidate relationships" before the share test. Not shown: the reduced
+    tolerance for features under about 40 m wide, sliver_tolerance() with
+    SLIVER_WIDTH_FRACTION.
+    Used in: 02a-PrevReefID-solution.md, figure 2.
+    """
+    fig =  Fig(900, 350, "Overlaps created by a redrawn division are rejected")
 
     old = blob(0, 0, 120, 42, seed=31, amp=0.05)
     new = blob(0, 0, 132, 48, seed=31, amp=0.05)
@@ -406,11 +476,16 @@ def fig_s2_sliver():
 # ---------------------------------------------------------------------------
 
 def _split_case(fig, x, title, pieces, seed, identifier):
-    old = scale_to_area(blob(0, 0, 1100, 780, seed=seed), 8.0)
-    p = Panel(fig, x, 96, 380, 220, title)
+    """Draw one old reef split into several new pieces and rank shared areas.
+
+    Returns the best and runner-up shared areas and their ratio, mirroring the
+    ranking in 02a Step 5.
+    """
+    old =  scale_to_area(blob(0, 0, 1100, 900, seed=seed), 8.0)
+    p = Panel(fig, x, 105, 380, 220, title)
     news = []
     for (cx, cy, rx, ry, sd) in pieces:
-        news.append(blob(cx, cy, rx, ry, seed=sd, amp=0.08))
+        news.append(blob(cx, cy, rx, ry, seed=sd, amp=0.15))
     p.fit([old] + news)
     for n in news:
         p.new(n)
@@ -437,16 +512,42 @@ def _split_case(fig, x, title, pieces, seed, identifier):
 
 
 def fig_s3_dominance():
-    fig = Fig(900, 430, "Deciding which successor keeps the official identifier")
+    """S3: the dominance test when one old reef is split.
+
+    Shows: (A) one fragment holds most of the old reef; its shared area is
+    11.5 times the next, so it keeps ReefID NN-001 and the two small fragments
+    record NN-001 in PrevReefID. (B) two comparable fragments, ratio 1.3, so
+    neither inherits and both record NN-002 in PrevReefID. Shared areas in km2
+    are computed, not drawn.
+    When: an old reef is remapped as several features, either because closer
+    mapping shows it is really several reefs, or because small outlying
+    patches are now mapped separately from the main reef.
+    Why: an official identifier can only pass to one feature, and choosing
+    between comparable successors is GBRMPA's decision, not this project's.
+    A ratio of 3 is deliberately conservative: it only passes ReefID across
+    when there is a clear winner, as in A. Lower ratios correspond to messy
+    cases that need judgement, so the identifier is kept as PrevReefID on
+    every candidate rather than lost. A one-to-one replacement has no runner
+    up and always inherits, so it needs no separate rule. Note the smallest
+    fragment in A shares only 0.01 of the old reef but 0.28 of itself, so it
+    is a candidate through share_new (see S1).
+    Code: 02a Step 5 "Allocate ReefID, PrevReefID and ReefFID", the loop over candidates_by_id:
+    candidates ranked by summed area, winner only if
+    best['area'] >= DOMINANCE_RATIO * runner_up. Non-winners get a provisional
+    ReefFID from make_provisional_id() and the identifier in
+    reef_edit_prevreefid.
+    Used in: 02a-PrevReefID-solution.md, figure 3.
+    """
+    fig =  Fig(900, 430, "Deciding which successor keeps the official identifier")
 
     best_a, second_a, ratio_a = _split_case(
         fig, 40, "A. One clear successor",
-        [(-180, 60, 1500, 1050, 61), (1500, 600, 400, 300, 62),
-         (-1500, -700, 350, 260, 63)], 60, "NN-001")
+        [(-100, 0, 1200, 800, 61), (1250, 600, 350, 250, 62),
+         (-1500, -900, 350, 260, 63)], 60, "NN-001")
 
     best_b, second_b, ratio_b = _split_case(
         fig, 480, "B. No clear successor",
-        [(-800, 0, 700, 760, 71), (760, 20, 560, 620, 72)], 70, "NN-002")
+        [(-1250, 0, 700, 900, 71), (760, 20, 900, 800, 72)], 70, "NN-002")
     print(f"    s3 ratios A {ratio_a:.1f} B {ratio_b:.1f}")
 
     fig.text(40, 340, f"ratio {ratio_a:.1f}, above 3", size=14,
@@ -461,7 +562,7 @@ def fig_s3_dominance():
     fig.attr_block(480, 350, [("ReefID", "null"), ("PrevReefID", "NN-002")],
                    width=185, title="both fragments")
 
-    fig.legend(40, 66, [('old', 'old boundary'), ('new', 'new mapping'),
+    fig.legend(40, 55, [('old', 'old boundary'), ('new', 'new mapping'),
                         ('int', 'shared area')])
     fig.save("s3-dominance-on-a-split.svg")
 
@@ -471,7 +572,29 @@ def fig_s3_dominance():
 # ---------------------------------------------------------------------------
 
 def fig_s4_multiple():
-    fig = Fig(900, 420, "Where one new feature relates to several old identifiers")
+    """S4: a new feature that wins several old identifiers (merges).
+
+    Shows: (A) a new reef polygon covering both reef 23-017 and the rock
+    23-017b nested in it. It wins both identifiers; the reef overlap is about
+    20 times the rock's, so it keeps 23-017 and records 23-017b. (B) reefs
+    18-044 and 18-069a remapped as one feature. 18-069a's overlap is about 3.6
+    times 18-044's, so it keeps 18-069a and records 18-044. Reef 18-069b only
+    touches the new feature (shares 0.075 / 0.011, below CANDIDATE_SHARE), so
+    it is not a candidate and does not appear in PrevReefID. Identifiers are
+    the real cases cited in the solution document; geometry is schematic.
+    When: routinely where a new reef polygon covers a rock or island polygon
+    sitting on the old reef, and where two old reefs turn out to be one.
+    Why: a feature can hold only one official identity. Without this step a
+    merged feature takes none of its identifiers, which is wrong in the common
+    nested-rock case. The same ratio of 3 is reused rather than adding a fourth
+    threshold, keeping the method explainable; where no constituent dominates,
+    all identifiers go to PrevReefID and the merge is left to GBRMPA.
+    Code: 02a Step 5 "Allocate ReefID, PrevReefID and ReefFID", won_by_edit, resolve_merge()
+    and inherited_by_edit; winners is rebuilt afterwards so a released
+    identifier is not reported as inherited.
+    Used in: 02a-PrevReefID-solution.md, figure 5.
+    """
+    fig =  Fig(900, 420, "Where one new feature relates to several old identifiers")
 
     # Panel A: a rock nested inside the reef it sits on.
     reef = blob(0, 0, 1000, 760, seed=81)
@@ -522,7 +645,29 @@ def fig_s4_multiple():
 # ---------------------------------------------------------------------------
 
 def fig_s5_shared_id():
-    fig = Fig(900, 400, "Dealing with reused Reef IDs in GBR Features")
+    """S5: one LABEL_ID shared by several source polygons.
+
+    Shows: (A) in GBR Features a reef, a rock and an island all carry 10-320,
+    because the a/b suffix convention was missed. (B) N1 covers most of the
+    reef and N2 is a rock mapped separately (N1 is cut around it, as Reef Edit
+    polygons do not overlap). The overlaps of every 10-320 polygon are summed
+    per new feature, N1 dominates, so 10-320 is awarded once, to N1, and N2
+    records it in PrevReefID.
+    When: 660 of the 9,050 source rows share a LABEL_ID with another polygon,
+    typically a reef with the rock or island on it.
+    Why: grouping by polygon would make two independent claims on 10-320 (the
+    reef claimed by N1, the rock by N2), and both could win, putting one
+    official identifier on two features. Grouping by identifier guarantees a
+    single winner or none.
+    Code: 02a Step 5 "Allocate ReefID, PrevReefID and ReefFID", candidates_by_id (areas summed
+    per edit_idx across old polygons with the same LABEL_ID). Step 10 warns
+    where a ReefID still covers several output features. Note that Island and
+    Mainland polygons are excluded from scoring in Step 4 (filter_mask), so in
+    the code the island in this figure is not part of the claim; the outcome
+    is the same.
+    Used in: 02a-PrevReefID-solution.md, figure 4.
+    """
+    fig =  Fig(900, 400, "Dealing with reused Reef IDs in GBR Features")
 
     reef = blob(0, 0, 1000, 700, seed=101)
     rock = blob(-420, 120, 180, 150, seed=102)
@@ -541,8 +686,9 @@ def fig_s5_shared_id():
     pa.label(430, -110, "10-320", size=11.5, dy=13, fill=ALT_LINE,
              weight="bold")
 
-    n1 = blob(-120, 0, 900, 640, seed=111)
     n2 = blob(-430, 130, 230, 190, seed=112)
+    # Reef Edit polygons never overlap each other, so N1 is cut around N2.
+    n1 = blob(-120, 0, 900, 640, seed=111).difference(n2)
 
     pb = Panel(fig, 480, 96, 380, 210, "B. How the claim is resolved")
     pb.fit([reef, rock, isle, n1, n2])
@@ -564,7 +710,27 @@ def fig_s5_shared_id():
 # ---------------------------------------------------------------------------
 
 def fig_s6_outcomes():
-    fig = Fig(900, 660, "Identifier outcomes by relationship type")
+    """S6: catalogue of ReefID / PrevReefID / ReefFID outcomes.
+
+    Shows six relationship types and the attributes they produce:
+    1 one-to-one replacement (single candidate, inherits); 2 split with a
+    dominant successor (ratio 8.9); 3 split with none dominant (1.0);
+    4 merge with a dominant constituent (4.0); 5 merge with none dominant
+    (1.0); 6 genuinely new feature (no candidate). "a / b" values give the
+    dominant / other fragments. PROV- is a provisional ReefFID.
+    When: every new feature falls into one of these types.
+    Why: ReefID is a claim about which reef this is, which only GBRMPA can
+    make, so it is kept only where one successor or constituent clearly
+    dominates. Everywhere else the association is still recorded as
+    PrevReefID, a statement about history that is safe to make. ReefFID is
+    always populated, so every feature has a dataset identifier.
+    Code: 02a Step 5 "Allocate ReefID, PrevReefID and ReefFID" as a whole: dominance on
+    candidates_by_id (types 1-3), resolve_merge() (types 4-5), and the final
+    loop that fills reef_edit_reefid, reef_edit_reeffid (make_provisional_id)
+    and reef_edit_prevreefid (type 6 when candidates_by_edit is empty).
+    Used in: 02a-PrevReefID-solution.md, figure 6.
+    """
+    fig =  Fig(900, 660, "Identifier outcomes by relationship type")
 
     cases = []
 
@@ -631,57 +797,170 @@ def fig_s6_outcomes():
 
 
 # ---------------------------------------------------------------------------
-# R1  Anatomy of an orphaned identifier
+# R1  Overlap thresholds and explicit corrections
 # ---------------------------------------------------------------------------
 
-def fig_r1_orphan():
-    fig = Fig(900, 420,
-              "Automatic linking only applies when the overlap is enough")
+def fig_r1_overlap():
+    """R1: overlap shares and control-point placement.
 
-    old = blob(0, 0, 1000, 700, seed=181)
-    new = blob(1450, 300, 700, 520, seed=182)
-    inter = old.intersection(new)
-    print(f"    r1 shares {inter.area / old.area:.3f} / "
-          f"{inter.area / new.area:.3f}")
-
-    pa = Panel(fig, 40, 96, 250, 200, "A. Overlap too low to link")
-    pa.fit([old, new])
-    pa.new(new)
-    pa.inter(inter)
-    pa.old(old)
-    pa.label(-300, 0, "NN-001", size=12.5, dy=5, fill=OLD_LINE, weight="bold")
-    pa.label(1900, 400, "new", size=12.5, dy=5, fill=NEW_LINE, weight="bold")
-    fig.attr_block(40, 316, [("ReefID", "null"), ("PrevReefID", "null")],
-                   width=250, title="new feature")
-    fig.text(40, 402, "NN-001 is lost. Reported in orphaned-identifiers.",
-             size=12.5, fill=BAD, weight="bold")
-
-    pb = Panel(fig, 340, 96, 250, 200, "B. Fix with a Move point")
-    pb.fit([old, new])
-    pb.new(new)
-    pb.inter(inter)
-    pb.old(old)
-    pb.point(-100, 0, colour=BAD, label="Move", dx=10, dy=5)
-    pb.label(1900, 400, "CODE set", size=12, dy=5, fill=NEW_LINE)
-    fig.attr_block(340, 316, [("ReefID", "NN-001"), ("PrevReefID", "null")],
-                   width=250, title="new feature")
-    fig.text(340, 402, "The old identifier is inherited.", size=12.5,
-             fill=GOOD, weight="bold")
-
-    pc = Panel(fig, 640, 96, 250, 200, "C. Fix with a Link point")
-    pc.fit([old, new])
-    pc.new(new)
-    pc.inter(inter)
-    pc.old(old)
-    ic = inter.centroid
-    pc.point(ic.x, ic.y, colour=GOOD, label="Link", dx=10, dy=5)
-    fig.attr_block(640, 316, [("ReefID", "null"), ("PrevReefID", "NN-001")],
-                   width=250, title="new feature")
-    fig.text(640, 402, "Lineage recorded, identity not claimed.", size=12.5,
-             fill=GOOD, weight="bold")
-
-    fig.legend(40, 66, [('old', 'old boundary'), ('new', 'new mapping'),
+    Shows: (A) the same shared area is less than 10% of the old polygon but
+    more than 10% of the new polygon, so the pair qualifies. (B) both shares
+    are too low, so the old reef is deleted without passing on its identifier.
+    (C) Move plus the old CODE on the replacement forces succession despite
+    weak overlap. (D) three old reefs become one new feature. The dominant
+    overlap supplies ReefID 15-004b; 15-004c qualifies as PrevReefID, while
+    15-004a needs a Link point because both its shares are below 10%.
+    (E) Move plus CODE also works with no overlap. (F) Remove on an old
+    false positive deletes it without a successor.
+    When: reviewing a lost identifier or correcting displaced old mapping.
+    Why: 10% of either polygon is sufficient, not 10% of both. The equivalent
+    area threshold is 0.1 times the smaller polygon's area. Automatic pairs
+    must also pass the sliver test. Deletion is separate from lineage.
+    Code: 02a score_pair(), Step 4 candidates and force_candidate(); Steps
+    2 and 3 move/remove deletion; Step 5 identifier allocation, including
+    resolve_merge(). Other outcomes assume one old identifier and one
+    successor. Link points must avoid nested rocks and cays.
+    Layout: A4-proportioned portrait, two columns, without a bottom caption.
+    The merge is schematic, not a reconstruction of the source boundaries.
+    Used in: 02a-PrevReefID-review-guide.md, figure 1.
+    """
+    fig = Fig(720, 720 * 297 / 210, "Overlap and identifier corrections")
+    fig.legend(24, 59, [('old', 'old boundary'), ('new', 'new mapping'),
                         ('int', 'shared area')])
+    fig.rect(24, 77, 672, 31, fill=BOX_FILL)
+    fig.text(360, 98,
+             "Automatic linking when shared area is at least 10% of either polygon.",
+             size=15, anchor="middle", weight="bold")
+
+    enough_old = blob(0, 0, 1200, 800, seed=11)
+    enough_new = blob(1450, 300, 800, 620, seed=12)
+    old = blob(0, 0, 1000, 700, seed=181)
+    weak_new = blob(1450, 300, 700, 520, seed=182)
+    far_new = blob(2350, 300, 700, 520, seed=182)
+    merge_new = blob(650, 0, 800, 1000, seed=231)
+    merge_a = blob(-450, 450, 500, 500, seed=234)
+    merge_b = blob(1150, 400, 750, 650, seed=232)
+    merge_c = blob(350, -1000, 360, 240, seed=233)
+    merge_a, merge_b, merge_c, merge_new = [
+        shp_scale(g, xfact=1.6, yfact=0.65, origin=(0, 0))
+        for g in (merge_a, merge_b, merge_c, merge_new)
+    ]
+
+    def draw_case(x, y, title, subtitle, old_geom, new_geom, action=None):
+        fig.text(x, y, title, size=16, weight="bold")
+        fig.text(x, y + 24, subtitle, size=15,
+                 fill=BAD if title.startswith("B.") else TEXT)
+        panel = Panel(fig, x, y + 40, 318, 112)
+        is_merge = action == 'Link'
+        old_geoms = [merge_a, merge_b, merge_c] if is_merge else [old_geom]
+        panel.fit(old_geoms + ([new_geom] if new_geom is not None else []))
+        inter = old_geom.intersection(new_geom) if new_geom is not None else None
+        if new_geom is not None:
+            panel.new(new_geom)
+            for geom in old_geoms:
+                panel.inter(geom.intersection(new_geom))
+            nc = new_geom.representative_point()
+            panel.label(nc.x + 180, nc.y, "new", size=14, fill=NEW_LINE,
+                        weight="bold")
+        for geom in old_geoms:
+            panel.old(geom)
+        oc = old_geom.representative_point()
+        if is_merge:
+            for wx, wy, label, colour in (
+                    (-720, 650, "15-004a", GOOD),
+                    (2160, 550, "15-004b", OLD_LINE),
+                    (560, -900, "15-004c", OLD_LINE)):
+                px, py = panel.px(wx, wy)
+                fig.rect(px - 27, py - 13, 54, 17,
+                         fill="#ffffff", stroke="none", rx=0)
+                panel.label(wx, wy, label, size=13, fill=colour, weight="bold")
+        else:
+            panel.label(oc.x - 280, oc.y + 240, "NN-001", size=14,
+                        fill=OLD_LINE, weight="bold")
+        if action in ('Move', 'Remove'):
+            panel.point(oc.x - 180, oc.y - 100, colour=BAD, label=action, dx=10)
+        if action == 'Move':
+            panel.label(nc.x + 120, nc.y - 240, "CODE = 12345", size=13,
+                        fill=NEW_LINE)
+            panel.label(oc.x - 200, oc.y - 430, "CODE: 12345", size=13,
+                        fill=OLD_LINE)
+        elif action == 'Link':
+            lp = inter.representative_point()
+            panel.point(lp.x, lp.y, colour=GOOD)
+            panel.arrow_to(lp.x, lp.y, -18, 26, colour=GOOD)
+            px, py = panel.px(lp.x, lp.y)
+            fig.text(px - 20, py + 43, "Link", size=14, anchor="end",
+                     fill=GOOD, weight="bold")
+
+        if new_geom is None:
+            fig.text(x, y + 168, "No replacement polygon.", size=14, fill=MUTED)
+            fig.text(x, y + 192, "Use only if mapped in error.", size=14)
+            print("    r1 F: deliberate removal, no successor")
+            return
+
+        share_old = inter.area / old_geom.area
+        share_new = inter.area / new_geom.area
+        for i, (name, value) in enumerate((("share_old", share_old),
+                                          ("share_new", share_new))):
+            ty = y + 168 + i * 24
+            colour = GOOD if value >= 0.1 else BAD
+            fig.text(x, ty, name, size=13.5, font=MONO, fill=MUTED)
+            # The full bar is 100%; the black tick marks the 10% threshold.
+            bx, by, bw = x + 94, ty - 11, 155
+            fig.rect(bx, by, bw, 12, fill=BOX_FILL, rx=0)
+            fig.rect(bx, by, bw * value, 12, fill=colour, stroke="none", rx=0)
+            fig.line(bx + bw * 0.1, by - 3, bx + bw * 0.1, by + 15,
+                     stroke=TEXT, width=1.5)
+            fig.text(x + 318, ty, f"{100 * value:.1f}%", size=14,
+                     anchor="end", fill=colour, weight="bold")
+        print(f"    r1 {title}: shares {share_old:.3f} / {share_new:.3f}; "
+              f"survives 10 m erosion: {not inter.buffer(-10).is_empty}")
+        if is_merge:
+            b_area = merge_b.intersection(new_geom).area
+            c_area = merge_c.intersection(new_geom).area
+            print(f"    r1 D: b/c overlap dominance {b_area / c_area:.3f}")
+
+    cases = [
+        (24, 132, "A. Enough on one side", "Automatic link",
+         enough_old, enough_new, None,
+         [("ReefID", "NN-001"), ("PrevReefID", "null")],
+         "Only share_new needs to pass.", GOOD),
+        (378, 132, "B. Too little on both sides", "No link", old, weak_new, None,
+         [("ReefID", "null"), ("PrevReefID", "null")],
+         "Old reef deleted; NN-001 is lost.", BAD),
+        (24, 432, "C. Low overlap replacement", "Move + CODE",
+         old, weak_new, 'Move',
+         [("ReefID", "NN-001"), ("PrevReefID", "null")],
+         "Move on old; its CODE on the replacement.", GOOD),
+        (378, 432, "D. Weak overlap in a merge", "Link to retain a previous ID",
+         merge_a, merge_new, 'Link',
+         [("ReefID", "15-004b"), ("PrevReefID", "15-004c, 15-004a")],
+         "15-004b dominates; Link retains 15-004a.", GOOD),
+        (24, 732, "E. No overlap", "Move + CODE", old, far_new, 'Move',
+         [("ReefID", "NN-001"), ("PrevReefID", "null")],
+         "Deletes old and links new despite zero overlap.", GOOD),
+        (378, 732, "F. No successor", "Remove", old, None, 'Remove',
+         [("ReefID", "none"), ("PrevReefID", "none")],
+         "Deliberate removal: reason 'Remove point'.", MUTED),
+    ]
+    for x, y, title, subtitle, old_geom, new_geom, action, attrs, note, colour in cases:
+        draw_case(x, y, title, subtitle, old_geom, new_geom, action)
+        fig.rect(x, y + 204, 318, 51, fill=BOX_FILL)
+        for i, (key, value) in enumerate(attrs):
+            ty = y + 225 + i * 21
+            fig.text(x + 8, ty, key, size=14, font=MONO, fill=MUTED)
+            if action == 'Link' and key == "PrevReefID":
+                fig.text(x + 310 - 7 * 14 * 0.6, ty, "15-004c, ", size=14,
+                         font=MONO, anchor="end")
+                fig.text(x + 310, ty, "15-004a", size=14, font=MONO,
+                         anchor="end", fill=GOOD, weight="bold")
+            else:
+                fig.text(x + 310, ty, value, size=14, font=MONO, anchor="end")
+        fig.text(x, y + 272, note, size=13.5, fill=colour)
+
+    fig.line(360, 123, 360, 1007, stroke=BOX_LINE)
+    for y in (412, 712):
+        fig.line(24, y, 696, y, stroke=BOX_LINE)
     fig.save("r1-orphaned-identifier.svg")
 
 
@@ -690,105 +969,110 @@ def fig_r1_orphan():
 # ---------------------------------------------------------------------------
 
 def fig_r2_subthreshold():
-    fig = Fig(900, 340,
+    """R2: typical sub-threshold overlaps a reviewer will see.
+
+    Shows three contacts that survive sliver erosion but are below
+    CANDIDATE_SHARE on both sides, so no relationship is recorded:
+    (A) a large reef's internal division redrawn by eye (0.05 / 0.045); on a
+    reef this large the offset is wider than the sliver test can catch.
+    (B) neighbouring fringing reefs remapped in more detail, the left one
+    reaching into its neighbour, arrowed (0.058 / 0.053). (C) old mapping
+    displaced from the true reef, so its real successor barely reaches it
+    (0.016 / 0.043). Under each panel the shared area is compared with the
+    area needed to link, 0.1 x the smaller of the two polygons, which is the
+    same test as max(share_old, share_new) >= CANDIDATE_SHARE.
+    When: A and B are common and are correct rejections; in both the old
+    feature also has a strong candidate elsewhere, so no identifier is lost.
+    C is the case the review exists to catch, and also appears as an orphan.
+    Why: the low 0.1 threshold lets PrevReefID flow through easily, but small
+    overlaps from redrawn divisions and neighbouring reefs must not, as they
+    would associate unrelated reefs. The layer makes these rejections
+    checkable rather than assumed, and is the evidence for whether 0.1 is
+    set correctly.
+    Code: 02a Step 6.2 "Sub-threshold overlaps": pairs where p['survives'] is
+    true but the pair is not in candidates, written to the
+    'sub-threshold-overlaps' layer with share_old, share_new and sole_pair.
+    Used in: 02a-PrevReefID-review-guide.md, figure 2.
+    """
+    fig = Fig(900, 430,
               "Examples of reefs just touching that are not automatically linked")
+    top = 122
 
     def shares(old, new):
         i = old.intersection(new)
         return i, i.area / old.area, i.area / new.area
 
+    def share_block(x, old, new, inter):
+        """Shared area against the area needed to pass CANDIDATE_SHARE."""
+        needed = 0.1 * min(old.area, new.area)
+        fig.attr_block(x, top + 184, [
+            ("shared", f"{km2(inter):.3f} km2"),
+            ("needed", f"{needed / 1e6:.3f} km2"),
+            ("old / new", f"{inter.area / old.area:.2f} / "
+                          f"{inter.area / new.area:.2f}"),
+        ], width=266, title="shared area vs needed to link")
+
     # A. A large reef split by eye, where the division cannot be traced exactly.
     a_old = blob(0, 0, 1800, 700, seed=191, amp=0.05)
     a_new = blob(0, 0, 1850, 730, seed=191, amp=0.05)
-    a_old_r = wobbly_cut(a_old, 0, seed=193, amp=60, side='right')
-    a_new_l = wobbly_cut(a_new, 70, seed=194, amp=60, side='left')
-    a_new_r = wobbly_cut(a_new, 70, seed=194, amp=60, side='right')
+    a_old_r = wobbly_cut(a_old, 0, seed=193, amp=30, side='right')
+    a_new_l = wobbly_cut(a_new, 70, seed=194, amp=30, side='left')
+    a_new_r = wobbly_cut(a_new, 70, seed=194, amp=30, side='right')
     a_int, a_so, a_sn = shares(a_old_r, a_new_l)
-    pa = Panel(fig, 40, 96, 250, 210, "A. A division redrawn by eye")
+    pa = Panel(fig, 40, top, 266, 170, "A. A division redrawn by eye")
     pa.fit([a_old, a_new])
     pa.new(a_new_l)
     pa.new(a_new_r)
     pa.inter(a_int)
-    pa.old(wobbly_cut(a_old, 0, seed=193, amp=60, side='left'))
+    pa.old(wobbly_cut(a_old, 0, seed=193, amp=30, side='left'))
     pa.old(a_old_r)
+    share_block(40, a_old_r, a_new_l, a_int)
 
-    # B. Fringing reefs along a coast, remapped in more detail.
-    land = coast_band(-2600, 2600, -700, 900, seed=195, amp=90)
+    # B. Fringing reefs along a coast, remapped in more detail. The land is
+    # trimmed to the reefs' extent so the reefs fill the panel width.
+    land = coast_band(-1800, 2300, -120, 700, seed=195, amp=60)
     b_old_l = blob(-900, 60, 850, 260, seed=196, amp=0.06).difference(land)
     b_old_r = blob(950, 60, 850, 260, seed=197, amp=0.06).difference(land)
     b_new_l = blob(-610, 70, 950, 275, seed=198, amp=0.10).difference(land)
-    b_new_r = blob(1150, 70, 800, 250, seed=199, amp=0.10).difference(land)
+    b_new_r = blob(1450, 70, 800, 250, seed=199, amp=0.10).difference(land)
     b_int, b_so, b_sn = shares(b_old_r, b_new_l)
-    pb = Panel(fig, 340, 96, 250, 210, "B. Neighbouring fringing reefs")
-    pb.fit([land, b_old_l, b_old_r, b_new_l, b_new_r])
+    pb = Panel(fig, 331, top, 266, 170, "B. Neighbouring fringing reefs")
+    pb.fit([land, b_old_l, b_old_r, b_new_l, b_new_r], pad=0.02)
     pb.draw(land, fill=LAND_FILL, stroke=LAND_LINE, width=1.4)
     pb.new(b_new_l)
     pb.new(b_new_r)
     pb.inter(b_int)
     pb.old(b_old_l)
     pb.old(b_old_r)
-    pb.label(0, -900, "land", size=12, fill=LAND_LINE)
-    bc = b_int.centroid
-    pb.arrow_to(bc.x, bc.y, 0, 62)
+    lc = land.centroid
+    pb.label(lc.x, lc.y, "land", size=12, dy=4, fill=LAND_LINE)
+    bx, by = b_int.centroid.x, b_int.bounds[3]
+    pb.arrow_to(bx, by, 0, -30)
+    pb.label(bx, by, "overlaps neighbouring", size=11.5, dy=-50, fill=MUTED)
+    pb.label(bx, by, "old reef", size=11.5, dy=-36, fill=MUTED)
+    share_block(331, b_old_r, b_new_l, b_int)
 
     # C. Old mapping displaced, so the real successor barely reaches it.
     c_old = blob(0, 0, 1400, 900, seed=211)
     c_new = blob(1880, -500, 800, 600, seed=212)
     c_int, c_so, c_sn = shares(c_old, c_new)
-    pc = Panel(fig, 640, 96, 250, 210, "C. Displaced old mapping")
+    pc = Panel(fig, 622, top, 266, 170, "C. Displaced old mapping")
     pc.fit([c_old, c_new])
     pc.new(c_new)
     pc.inter(c_int)
     pc.old(c_old)
+    share_block(622, c_old, c_new, c_int)
 
     print(f"    r2 shares  A {a_so:.3f}/{a_sn:.3f}  B {b_so:.3f}/{b_sn:.3f}  "
           f"C {c_so:.3f}/{c_sn:.3f}")
 
+    fig.text(40, 416, "Linking needs the shared area to be at least 10% of "
+             "the old or the new feature, whichever is smaller.",
+             size=13, fill=TEXT, weight="bold")
+
     fig.legend(40, 66, [('old', 'old boundary'), ('new', 'new mapping'),
                         ('int', 'shared area')])
     fig.save("r2-sub-threshold-overlaps.svg")
-
-
-# ---------------------------------------------------------------------------
-# R3  Placing control points
-# ---------------------------------------------------------------------------
-
-def fig_r3_points():
-    fig = Fig(900, 330, "Where each control point goes")
-
-    old = scale_to_area(blob(0, 0, 900, 640, seed=221), 2.0)
-    new_far = scale_to_area(blob(2100, 150, 850, 620, seed=222), 1.8)
-    new_over = scale_to_area(blob(1050, 120, 850, 620, seed=223), 1.8)
-    rock = scale_to_area(blob(180, -80, 200, 160, seed=224), 0.05)
-
-    pa = Panel(fig, 40, 96, 250, 210, "A. Move")
-    pa.fit([old, new_far])
-    pa.new(new_far)
-    pa.old(old)
-    pa.point(0, 0, colour=BAD, label="", dx=0)
-    pa.label(2100, 150, "CODE set", size=12, dy=5, fill=NEW_LINE)
-
-    pb = Panel(fig, 340, 96, 250, 210, "B. Remove")
-    pb.fit([old, new_far])
-    pb.old(old)
-    pb.point(0, 0, colour=BAD, label="", dx=0)
-
-    pc = Panel(fig, 640, 96, 250, 210, "C. Link")
-    pc.fit([old, new_over, rock])
-    pc.new(new_over)
-    inter = old.intersection(new_over)
-    pc.inter(inter)
-    pc.old(old)
-    pc.draw(rock, fill=ALT_FILL, stroke=ALT_LINE, width=1.5, dash=OLD_DASH)
-    ic = inter.centroid
-    pc.point(ic.x, ic.y, colour=GOOD, label="", dx=0)
-    pc.point(180, -80, colour=BAD, label="", dx=0)
-    pc.label(180, -80, "avoid", size=12, dx=0, dy=-14, fill=BAD,
-             weight="bold")
-
-    fig.legend(40, 66, [('old', 'old boundary'), ('new', 'new mapping'),
-                        ('int', 'shared area')])
-    fig.save("r3-control-points.svg")
 
 
 def main():
@@ -799,9 +1083,8 @@ def main():
     fig_s4_multiple()
     fig_s5_shared_id()
     fig_s6_outcomes()
-    fig_r1_orphan()
+    fig_r1_overlap()
     fig_r2_subthreshold()
-    fig_r3_points()
     print("Done")
 
 

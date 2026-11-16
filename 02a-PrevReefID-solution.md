@@ -343,7 +343,7 @@ designed to surface.
 
 ## Review outputs
 
-Six layers are written to `working/02/debug-reefid-review.gpkg` on every run. A GeoPackage is
+Six layers are written to `working/{version}/02/debug-reefid-review.gpkg` on every run. A GeoPackage is
 used rather than separate shapefiles because it holds all the layers in one file and does not
 truncate field names to ten characters, which matters when the attributes include two shares and
 several areas. The dataset outputs remain shapefiles. Spatial outputs are used throughout rather

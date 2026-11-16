@@ -54,11 +54,11 @@ It contains RB_Type_L2, Area_km2, L2FID and aggregated attributes. Only 'Coral R
 
 Stage 08 is adapted from NW-Aus-Features 13-make-RB_Type_L2.py. It cleans geometry, dissolves touching features within each L2 class and exports singlepart polygons in EPSG:4283. It retains the NW priorities for Attachment and DepthCat, the lowest FeatConf and TypeConf, the maximum EdgeAcc_m, and sorted unique L3 classifications and source values. Areas are recalculated in EPSG:3577 and rounded to four decimal places. A05 recalculates its own areas from geometry rather than these rounded values.
 
-Each L2 polygon receives a temporary L2FID. National source identifiers do not follow the NW suffix scheme and are not rewritten or treated as a single shared identifier. The accompanying `_members.csv` links L2FID to SourceRow (the 1-based input record), ReefID, ReefFID and the original confidence values. Multipart sources are exploded before dissolution and may appear in several L2 polygons. This retains source membership without truncating lists of identifiers to shapefile field limits. Mixed-attachment polygons are exported to `working/{version}/08/multi-attachment-values.shp`, including an empty QA layer when none are found. Invalid inputs and aggregated text exceeding the shapefile limit of 254 bytes cause explicit errors.
+Each L2 polygon receives a temporary L2FID. National source identifiers do not all follow the NW suffix scheme and are not renamed or treated as a single shared identifier. ReefFID, ReefID, PrevReefID, Dataset and Sovereign1 are retained as sorted unique non-empty source values separated by semicolons, with existing lists split and trimmed before deduplication. The three identifier fields use lossless NW suffix shorthand when shorter, with different bases grouped separately and unrecognised formats retained literally. For example, `R-8137-034{a-c,f}` records exactly four identifiers. See [Compact identifier notation](08-make-RB_Type_L2-spec.md#compact-identifier-notation). These are independent sets, not positionally aligned source records. Sovereign1 uses source attributes without spatial recalculation. No membership CSV is generated; original source-record relationships and confidence values remain in the full-classification dataset. Multipart sources are exploded before dissolution and may contribute attributes to several L2 polygons. Mixed-attachment polygons are exported to `working/{version}/08/multi-attachment-values.shp`, including an empty QA layer when none are found. Invalid inputs and aggregated text exceeding the shapefile limit of 254 UTF-8 bytes after compression cause explicit errors.
 
 Blank confidence values are allowed. Non-standard values, including `Very high`, `LowHigh` and `HighLow`, are flagged for source cleanup in `working/{version}/08/confidence-issues.csv`. They are not normalised or assigned a rank. A dissolved polygon has blank confidence if any constituent has blank or non-standard confidence. See [08-make-RB_Type_L2-spec.md](08-make-RB_Type_L2-spec.md) for the standalone L2 specification.
 
-L2 dissolution and countable-reef clustering are separate operations. Stage 08 joins touching L3 parts. A05 subsequently uses reef_utils.cluster_countable to group nearby L2 polygons and apply the minimum effective width. The L2 product is not the geometry-only dissolved statistics layer produced by A01.
+L2 dissolution and countable-reef clustering are separate operations. Stage 08 joins touching L3 parts. A05 subsequently uses reef_utils.cluster_countable to group nearby L2 polygons and apply the minimum effective width. A01 also reuses the stage 08 L2 product for dissolved counts and areas; it no longer produces a separate geometry-only L2 layer.
 
 ## Processing
 All A05 processing uses EPSG:3577 for equal-area measurement. Prepared regional layers and map exports use this CRS.
@@ -123,9 +123,25 @@ working/{version}/A05/reefs-by-capad-10m-near300m.shp
 working/{version}/A05/region-stats-checks.csv
 working/{version}/A05/debug-overlap-imcra.shp (This for the overlap of the regionalisation dataset, if there is any problems with the dataset)
 
-As we expect the processing to be slow (~hour) each significant intermediate step should cache its output, allowing that step to be skipped on a repeat run. This is to allow later stages of the script to be debugged without needing to wait for multiple reruns of early processing steps. We will manually invalidate the cache by manually deleting files. The 10 m suffix on the CAPAD caches prevents unsimplified region geometries or reef cuts from being reused; changing the simplification tolerance should change the cache names. Likewise the near distance is part of the near region and reef cut cache names, so changing it, or enabling near regions for a regionalisation, does not reuse stale caches. Reef cut caches written before the `Near` and `Assigned` attributes existed must be deleted.
+As we expect the processing to be slow (~hour) each significant intermediate step saves its output for review and optional reuse. By default, a full run clears all spatial cache files and their sidecars before rebuilding them. Use `python A05-reef-distribution.py --use-cache` to skip cached stages when debugging later processing steps, but only when inputs and processing rules are unchanged. Cache deletion errors stop processing rather than allowing stale results to be reused. Other working files, including conservation checks and overlap diagnostics, are not deleted by cache clearing. The 10 m suffix on the CAPAD caches prevents unsimplified region geometries or reef cuts from being reused; changing the simplification tolerance should change the cache names. Likewise the near distance is part of the near region and reef cut cache names, so changing it, or enabling near regions for a regionalisation, does not reuse stale caches. Reef cut caches written before the `Near` and `Assigned` attributes existed must be deleted or rebuilt with a default run.
 
 ## Region summarisation
+### Feature-level uncertainty summaries
+
+Alongside countable-reef distribution outputs, A05 reads the current full-classification product to summarise `FeatConf`, `TypeConf` and `EdgeAcc_m` for source records whose `RB_Type_L2` is Coral Reef or Rocky Reef. Other feature types are excluded. These records are not dissolved, clustered or filtered by minimum size. Each is assigned once to the Analysis-region with the largest intersection area in EPSG:3577, or to `No match` when its area outside all regions is larger. Equal-area named-region ties use alphabetical order. Geometry that becomes invalid after analysis projection is repaired in memory for allocation only; source polygons are not rewritten.
+
+Outputs are `A05_Feature-quality_{version}-confidence.csv`, `A05_Feature-quality_{version}-edge-accuracy.csv`, `A05_Feature-quality_{version}-edge-histogram.csv`, `A05_Feature-quality_{version}.png` and `A05_Feature-quality_{version}.md` under `data/{version}/out/stats/`. CSV groups retain Analysis-region, original Dataset, broad reef type and boundary-attribute provenance. Confidence tables retain missing and non-standard values, with percentages based on all feature records in each source/type/region group. Non-standard categories produce a warning and are reported rather than reclassified.
+
+`GBR Features` and `TS Features` have area-based legacy `EdgeAcc_m` defaults of 150, 200, 300, 600 or 800 m. Their `FeatConf` is blank. GBR `TypeConf` is blank, while TS values are inherited from `CLASS_CONF`, with `LowHigh` translated to `Low`. These are not equivalent to feature-specific expert assessments during the new digitisation. The histogram separates legacy defaults from regional or edited mapping. The original Dataset field remains available for source-specific comparisons. Values outside the two legacy sources are reported as supplied, without independently establishing their assessment basis.
+
+Positive boundary values are plotted as record counts in bins centred on 24 common rounded values: 10, 15, 20, 25, 30, 40, 50, 60, 70, 80, 100, 120, 150, 200, 250, 300, 400, 500, 600, 800, 1,000, 1,500, 2,000 and 3,000 m. In v1-0 about 97% of reef records use one of 20 such values, so bins with arbitrary edges would merge neighbouring values or leave artificial empty bins between them. Inner bin edges are geometric midpoints between neighbouring centres, so other values are counted in the nearest centre on a logarithmic scale. The outer edges are 10 and 3,000 m. The final bin includes 3,000 m; other bins are lower-inclusive and upper-exclusive. Bars are drawn with equal width on the logarithmic axis, so wider bins do not look larger, and the two boundary bases are stacked in separate colours. Positive values below 10 m or above 3,000 m are not clipped into the end bins. They remain in the numeric summaries and in histogram CSV rows whose `Bin_scope` is `Below plotted range` or `Above plotted range`. Visible bins have `Bin_scope` = `Plotted` and record `Bin_centre_m`, `Bin_lower_m` and `Bin_upper_m`. Panel labels report out-of-range counts when present; N includes all regional records.
+
+New Caledonia is omitted from the figure because it contains one record, but retained in all tables and CSVs. Fonts are enlarged by 30%, with shared figure-wide axis labels and horizontal tick labels on the bottom visible panel in each column. Horizontal and vertical panel-spacing ratios are halved, and the figure height is reduced to keep the page layout compact without reducing font sizes. Missing, zero, negative, non-numeric and non-finite values are excluded from the histogram and separately counted in the numeric summary and panel labels. Invalid values produce a warning. Median, 90th percentile, range, count at or below 50 m and count above 1,000 m summarise all stored positive values, including those outside the plotted range. They do not measure independent accuracy or reef condition.
+
+These summaries are regenerated on every A05 run without using the countable-reef or reef-piece caches. Use `python A05-reef-distribution.py --quality-only` to regenerate only these outputs. This clears and rebuilds only the analysis-region boundary cache, leaving distribution caches and statistics untouched. Add `--use-cache` to reuse the analysis-region boundaries when unchanged. Focused tests use `python -m unittest discover -s tests -p "test_feature_quality.py" -b`.
+
+### Countable reef tables
+
 A CSV summary table should be generated that will have the following tall table:
 Region_dataset, Region_type, Region_name, Near_region, Label, Coral_reef_count, Coral_reef_partial_count, Coral_reef_area_km2, Rocky_reef_count, Rocky_reef_partial_count, Rocky_reef_area_km2
 
@@ -147,6 +163,32 @@ The CSV should only include regions and near regions that contain reef area afte
 
 Save this result to data/{version}/out/stats/Aus-Trop-Reef-Features_Region-stats_{version}.csv.
 Regional map exports use `Aus-Trop-Reef-Features_Region-stats_{slug}_{version}.shp` in the same folder.
+
+### Technical report tables
+
+Also save `data/{version}/out/stats/A05_Report-tables_{version}.md` on every run,
+including runs using cached spatial analysis. Generate one numbered Markdown
+table per regionalisation from the same records as the CSV. Include every CSV
+row in its regionalisation table, retaining its order, near-region labels and
+'No match'. Columns are Region, Coral reefs, Coral partial, Coral area (km2),
+Rocky reefs, Rocky partial and Rocky area (km2). Use thousands separators for
+counts and areas. Display areas to one decimal place and positive areas below
+0.1 km2 as `<0.1`; retain six decimal places in the CSV.
+
+Each table must have a descriptive caption that names the regionalisation,
+explains count assignment, partial counts and clipped areas, and explicitly
+records the configured dataset version and `A05-reef-distribution.py` as the
+analysis script. CAPAD captions must explain the intentional double counting
+from overlapping protected areas and the meaning of the 300 m near-region
+rows. Captions must state that 'No match' is not restricted to Australian
+waters. Do not add summed CAPAD totals or an Australian protection percentage
+from these rows.
+
+Record the input reef dataset, CSV and conservation-check paths in the document.
+Explain the countable-reef unit, sliver removal, EPSG:3577 area calculations and
+display rounding. If any conservation check fails, retain the tables for
+debugging but place a prominent warning before them identifying the failed
+regionalisation and reef type. These tables require review before report use.
 
 ## Addendum 1
 Reef counts and areas are also exported with each regionalisation as a shapefile for mapping. Each export contains the occupied regions and near regions represented in the CSV. 'No match' has no region polygon and remains only in the CSV. Exports use the prepared geometries used for slicing, including CAPAD dissolved by `TYPE` and `NAME`. Near regions carry `Near` = 1; other regions carry `Near` = 0. CAPAD retains `TYPE` and `NAME`, with statistics joined on both fields and `Near`. Each shapefile carries `Label`, `CoralCount`, `CoralPart`, `CoralKm2`, `RockyCount`, `RockyPart` and `RockyKm2`. Save exports to `data/{version}/out/stats/Aus-Trop-Reef-Features_Region-stats_{slug}_{version}.shp`, where slug is `imcra`, `analysis-region` or `capad`.

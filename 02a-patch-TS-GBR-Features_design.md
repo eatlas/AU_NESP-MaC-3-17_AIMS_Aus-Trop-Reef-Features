@@ -55,7 +55,7 @@ because they overlap the remapped Torres Strait coverage. Both records with
 associated islands. The refresh stage reconstructs the `LEVEL_1`, `LEVEL_2` and
 `LEVEL_3` fields from `FEAT_NAME`, transforms the source from GDA2020 to GDA94,
 repairs invalid source geometries, and validates the written intermediate. The
-result is `working/01/TS-GBR-Features-latest.shp`.
+result is `working/{version}/01/TS-GBR-Features-latest.shp`.
 
 ### Overlap assessment
 
@@ -149,7 +149,7 @@ in a later processing step (05-add-depth.py).
 
 | File | Source | Description |
 |---|---|---|
-| `working/01/TS-GBR-Features-latest.shp` | Derived | Torres Strait features combined with the latest filtered GBRMPA GBR Features by `01d-refresh-TS-GBR-Features.py` (EPSG:4283) |
+| `working/{version}/01/TS-GBR-Features-latest.shp` | Derived | Torres Strait features combined with the latest filtered GBRMPA GBR Features by `01d-refresh-TS-GBR-Features.py` (EPSG:4283) |
 | `{in_path}/Reef-edit/AIMS_GBR-TS-Features_Edit_{version}.shp` | Project | Newly mapped reef polygons with full attributes (EPSG:4326) |
 | `{in_path}/Reef-remove-move/AIMS_GBR-TS-Features_remove-move_{version}.shp` | Project | Points indicating features to remove or move (EPSG:4283) |
 | `{in_3p_path}/NW-Aus-Feat_{nw_aus_feat_version}/in/RB_Type_L3_crosswalk.csv` | Third-party | Classification lookup for old features |
@@ -159,9 +159,9 @@ Paths resolve via `config.ini`: `in_3p_path`, `in_path`, `version`.
 
 ## Output
 
-`working/02/TS-GBR-Features-patched.shp` (EPSG:4283)
+`working/{version}/02/TS-GBR-Features-patched.shp` (EPSG:4283)
 
-`working/02/debug-reefid-review.gpkg` (EPSG:4283) holds the identifier review
+`working/{version}/02/debug-reefid-review.gpkg` (EPSG:4283) holds the identifier review
 layers described under processing step 6. A GeoPackage is used because it holds
 several layers in one file and does not truncate field names to ten characters.
 Empty layers are not written.
@@ -190,7 +190,7 @@ against real cases before publication.
 3. Read Remove-Move points.
 4. Load crosswalk CSV.
 5. Error on null geometries in any input. Error on invalid Reef Edit polygons
-   and save them to `working/02/debug-invalid-reef-edit.shp` with the validity
+   and save them to `working/{version}/02/debug-invalid-reef-edit.shp` with the validity
    reason in `geom_issue`.
 6. Save a copy of island/mainland features (LEVEL_1 in {Island, Mainland}) for
    Attachment calculation.
@@ -218,9 +218,9 @@ step 5.
 intersect a GBR feature whose CODE appears in the Reef Edit CODE column. A Reef
 Edit CODE without a Move point is allowed because CODE is also used to
 disambiguate replacements. Move points outside all source features are saved to
-`working/02/debug-unmatched-move-points.shp`. Move points whose source CODE is
+`working/{version}/02/debug-unmatched-move-points.shp`. Move points whose source CODE is
 absent from Reef Edit are saved to
-`working/02/debug-unmatched-move-codes.shp`. The script then exits so the inputs
+`working/{version}/02/debug-unmatched-move-codes.shp`. The script then exits so the inputs
 can be corrected in QGIS.
 
 ### 3. Process removals
@@ -229,7 +229,7 @@ For each `ACTION='Remove'` point in Remove-Move:
 - Spatially join to GBR features (point-in-polygon).
 - Mark matched GBR features for deletion.
 - All unmatched points are collected and saved to
-  `working/02/debug-unmatched-remove-points.shp` before the script errors.
+  `working/{version}/02/debug-unmatched-remove-points.shp` before the script errors.
 
 ### 4. Score old and new polygon pairs
 
@@ -278,7 +278,7 @@ suffix (a, b, c, ...) if collisions occur.
 
 ### 6. Review outputs
 
-Written to `working/02/debug-reefid-review.gpkg`. None of these layers stops the
+Written to `working/{version}/02/debug-reefid-review.gpkg`. None of these layers stops the
 run.
 
 - `orphaned-identifiers`: deleted old features whose identifier appears in no
@@ -347,7 +347,7 @@ For GBR features that survived step 7:
 3. Set CRS to EPSG:4283.
 4. Report any official identifier held by more than one feature to the
    `shared-reefid` review layer.
-5. Save to `working/02/TS-GBR-Features-patched.shp`.
+5. Save to `working/{version}/02/TS-GBR-Features-patched.shp`.
 
 ## Output attribute schema
 
@@ -382,7 +382,7 @@ For GBR features that survived step 7:
 6. Every `ACTION` value in Remove-Move is one of `VALID_ACTIONS`.
 7. Script errors on any validation failure (data should be fixed upstream).
 8. On failure, unmatched Move and Remove points are saved to debug shapefiles
-   in `working/02/` for inspection in QGIS.
+   in `working/{version}/02/` for inspection in QGIS.
 
 Identifier outcomes that are interpretable but may be wrong do not stop the run.
 They are written to the review GeoPackage instead, because halting on them would

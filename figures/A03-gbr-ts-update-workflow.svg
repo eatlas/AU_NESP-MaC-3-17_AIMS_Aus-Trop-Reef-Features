@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="160mm" height="192.000mm" viewBox="0 0 900 1080" role="img" aria-labelledby="title description">
+<title id="title">Update of the GBR and Torres Strait mapping</title>
+<desc id="description">Existing GBR mapping is refreshed while TS mapping is retained, and legacy classes are standardised. Manual interpretation of imagery and bathymetry produces Reef Edits and correction controls. Edits are clipped before integration, identifiers are preserved, and retained legacy features are clipped afterwards. The repeated Coastline50k boxes refer to the same landmask.</desc>
+<g data-source="gbr_ts" data-target="refresh">
+<polyline points="109,116 109,284" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="109,284 104,274 114,274" fill="#8CB6D6"/>
+</g>
+<g data-source="latest_gbr" data-target="refresh">
+<polyline points="299,116 299,284" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="299,284 294,274 304,274" fill="#8CB6D6"/>
+</g>
+<g data-source="regional_crosswalk" data-target="refresh">
+<polyline points="204,234 204,284" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="204,284 199,274 209,274" fill="#8CB6D6"/>
+</g>
+<g data-source="imagery" data-target="digitise">
+<polyline points="519,242 519,284" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="519,284 514,274 524,274" fill="#8CB6D6"/>
+</g>
+<g data-source="bathymetry" data-target="digitise">
+<polyline points="765,242 765,284" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="765,284 760,274 770,274" fill="#8CB6D6"/>
+</g>
+<g data-source="digitise" data-target="edits">
+<polyline points="519,380 519,428" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="519,428 514,418 524,418" fill="#8CB6D6"/>
+</g>
+<g data-source="digitise" data-target="controls">
+<polyline points="765,380 765,428" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="765,428 760,418 770,418" fill="#8CB6D6"/>
+</g>
+<g data-source="edits" data-target="clip_edits">
+<polyline points="519,504 519,548" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="519,548 514,538 524,538" fill="#8CB6D6"/>
+</g>
+<g data-source="edit_landmask" data-target="clip_edits">
+<polyline points="384,586 408,586" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="408,586 398,591 398,581" fill="#8CB6D6"/>
+</g>
+<g data-source="refresh" data-target="integrate">
+<polyline points="204,380 204,704" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="204,704 199,694 209,694" fill="#8CB6D6"/>
+</g>
+<g data-source="clip_edits" data-target="integrate">
+<polyline points="519,624 519,704" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="519,704 514,694 524,694" fill="#8CB6D6"/>
+</g>
+<g data-source="controls" data-target="integrate">
+<polyline points="765,504 765,704" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="765,704 760,694 770,694" fill="#8CB6D6"/>
+</g>
+<g data-source="integrate" data-target="clip_legacy">
+<polyline points="450,784 450,852" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="450,852 445,842 455,842" fill="#8CB6D6"/>
+</g>
+<g data-source="legacy_landmask" data-target="clip_legacy">
+<polyline points="194,892 270,892" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="270,892 260,897 260,887" fill="#8CB6D6"/>
+</g>
+<g data-source="clip_legacy" data-target="updated">
+<polyline points="450,932 450,980" fill="none" stroke="#8CB6D6" stroke-width="3" stroke-linejoin="round"/>
+<polygon points="450,980 445,970 455,970" fill="#8CB6D6"/>
+</g>
+<g id="gbr_ts">
+<rect x="24" y="40" width="170" height="76" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="109" y="71" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">GBR + TS</text>
+<text x="109" y="97" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Features</text>
+</g>
+<g id="latest_gbr">
+<rect x="214" y="40" width="170" height="76" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="299" y="71" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Latest GBRMPA</text>
+<text x="299" y="97" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">GBR Features</text>
+</g>
+<g id="regional_crosswalk">
+<rect x="119" y="158" width="170" height="76" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="204" y="189" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">RB classification</text>
+<text x="204" y="215" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">crosswalk</text>
+</g>
+<g id="refresh">
+<rect x="24" y="284" width="360" height="96" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="204" y="312" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Refresh GBR mapping</text>
+<text x="204" y="338" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#FFFFFF" text-anchor="middle">Retain TS mapping</text>
+<text x="204" y="364" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#FFFFFF" text-anchor="middle">Standardise legacy classes</text>
+</g>
+<g id="imagery">
+<rect x="408" y="24" width="222" height="218" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="519" y="87" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#005A9C" text-anchor="middle">Imagery</text>
+<text x="519" y="113" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">S2 All Tide</text>
+<text x="519" y="139" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">S2 Low Tide</text>
+<text x="519" y="165" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Queensland Globe</text>
+<text x="519" y="191" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">aerial imagery</text>
+</g>
+<g id="bathymetry">
+<rect x="654" y="24" width="222" height="218" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="678" y="61" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#005A9C" text-anchor="start">Bathymetry</text>
+<text x="678" y="87" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="start">MultiRes-Bathy-</text>
+<text x="678" y="113" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="start">EEZ_2024</text>
+<text x="694" y="139" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="start">GBR DEM 2020,</text>
+<text x="694" y="165" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="start">30 m</text>
+<text x="694" y="191" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="start">Torres Strait DEM</text>
+<text x="694" y="217" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="start">2023, 30 m</text>
+<polyline points="688,123 682,123 682,221 688,221" fill="none" stroke="#354054" stroke-width="1"/>
+</g>
+<g id="digitise">
+<rect x="408" y="284" width="468" height="96" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="642" y="325" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Digitise edits and controls</text>
+<text x="642" y="351" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#FFFFFF" text-anchor="middle">Manual interpretation</text>
+</g>
+<g id="edits">
+<rect x="408" y="428" width="222" height="76" rx="4" fill="#FFF8ED" stroke="#C89600" stroke-width="1.5"/>
+<text x="519" y="472" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Reef Edits</text>
+</g>
+<g id="controls">
+<rect x="654" y="428" width="222" height="76" rx="4" fill="#FFF8ED" stroke="#C89600" stroke-width="1.5"/>
+<text x="765" y="459" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Move / Remove /</text>
+<text x="765" y="485" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Link + CODE</text>
+</g>
+<g id="edit_landmask">
+<rect x="214" y="548" width="170" height="76" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="299" y="579" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Coastline50k</text>
+<text x="299" y="605" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">landmask</text>
+</g>
+<g id="clip_edits">
+<rect x="408" y="548" width="222" height="76" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="519" y="579" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Clip Reef Edits</text>
+<text x="519" y="605" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">to coastline</text>
+</g>
+<g id="integrate">
+<rect x="24" y="704" width="852" height="80" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="450" y="737" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Integrate edits</text>
+<text x="450" y="763" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#FFFFFF" text-anchor="middle">Preserve ReefIDs</text>
+</g>
+<g id="legacy_landmask">
+<rect x="24" y="854" width="170" height="76" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="109" y="885" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Coastline50k</text>
+<text x="109" y="911" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">landmask</text>
+</g>
+<g id="clip_legacy">
+<rect x="270" y="852" width="360" height="80" rx="10" fill="#00A3DF" stroke="#354054" stroke-width="1.5"/>
+<text x="450" y="898" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="bold" fill="#FFFFFF" text-anchor="middle">Clip retained legacy features</text>
+</g>
+<g id="updated">
+<rect x="270" y="980" width="360" height="76" rx="4" fill="#FFFFFF" stroke="#354054" stroke-width="1.5"/>
+<text x="450" y="1024" font-family="Arial, Helvetica, sans-serif" font-size="18" font-weight="normal" fill="#005A9C" text-anchor="middle">Updated GBR + TS Features</text>
+</g>
+</svg>

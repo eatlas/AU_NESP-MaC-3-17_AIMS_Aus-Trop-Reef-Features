@@ -65,7 +65,7 @@ class CoralSeaConfidenceTests(unittest.TestCase):
             }).to_csv(crosswalk_path, index=False)
             with patch.object(coral_sea, "get_filepaths", return_value=(
                 str(reefs_path), str(platforms_path), str(crosswalk_path), str(output_path)
-            )), patch.object(coral_sea, "OUTPUT_DIR", str(output_path.parent)):
+            )):
                 coral_sea.main()
             result = gpd.read_file(output_path)
             self.assertEqual(len(result), 2)

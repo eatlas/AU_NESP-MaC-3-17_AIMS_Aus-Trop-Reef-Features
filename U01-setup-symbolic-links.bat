@@ -68,7 +68,7 @@ REM match cs_feat_version and nw_aus_feat_version in config.ini. Update them her
 REM when those versions change. EEZ-land-union_2024 is the manually downloaded
 REM ESRI Country shapefile (see README.md).
 REM ============================================================
-set DATASETS=Coastline50k TS-GBR-Feat CS-Feat_v1-2 NW-Aus-Feat_v1-2 AusBathyTopo-250m_2024 MultiRes-Bathy-EEZ_2024 AU_DCCEEW_Australia-Marine-Parks_2025 World_WCMC_CoralReefs2021_v4_1 EOT20-tides EEZ-land-union_2024 S2 CAPAD-2024 nesp-3-17-analysis-regions IMCRA-v4-0-Meso-Bioregions
+set DATASETS=Coastline50k TS-GBR-Feat CS-Feat_v1-2 NW-Aus-Feat_v1-2 AusBathyTopo-250m_2024 MultiRes-Bathy-EEZ_2024 AU_DCCEEW_Australia-Marine-Parks_2025 World_WCMC_CoralReefs2021_v4_1 EOT20-tides EEZ-land-union_2024 S2 CAPAD-2024 nesp-3-17-analysis-regions IMCRA-v4-0-Meso-Bioregions natural-earth-admin-0-countries-50m
 
 REM ============================================================
 REM Process each dataset
